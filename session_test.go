@@ -78,3 +78,23 @@ func TestParseCodexSessionMeta(t *testing.T) {
 		t.Fatalf("unexpected meta: %+v", meta)
 	}
 }
+
+func TestFindCodexSessionMetaAfter(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "2026", "05", "27", "rollout.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	line := `{"type":"session_meta","payload":{"id":"019d-new","cwd":"/tmp/work"}}` + "\n"
+	if err := os.WriteFile(path, []byte(line), 0o600); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	meta, err := FindCodexSessionMetaAfter(root, time.Now().Add(-time.Minute), "/tmp/work")
+	if err != nil {
+		t.Fatalf("find meta: %v", err)
+	}
+	if meta.ID != "019d-new" {
+		t.Fatalf("got %q", meta.ID)
+	}
+}

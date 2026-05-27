@@ -112,3 +112,42 @@ func ParseCodexSessionMeta(path string) (CodexSessionMeta, error) {
 	}
 	return CodexSessionMeta{}, errors.New("codex session_meta not found")
 }
+
+func FindCodexSessionMetaAfter(root string, after time.Time, cwd string) (CodexSessionMeta, error) {
+	var newest CodexSessionMeta
+	var newestModTime time.Time
+
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".jsonl" {
+			return nil
+		}
+
+		info, err := entry.Info()
+		if err != nil || info.ModTime().Before(after) {
+			return nil
+		}
+
+		meta, err := ParseCodexSessionMeta(path)
+		if err != nil {
+			return nil
+		}
+		if cwd != "" && meta.CWD != cwd {
+			return nil
+		}
+		if newest.ID == "" || info.ModTime().After(newestModTime) {
+			newest = meta
+			newestModTime = info.ModTime()
+		}
+		return nil
+	}); err != nil {
+		return CodexSessionMeta{}, err
+	}
+
+	if newest.ID == "" {
+		return CodexSessionMeta{}, errors.New("codex session_meta not found")
+	}
+	return newest, nil
+}

@@ -68,7 +68,8 @@ func (a *App) ListSessions() ([]Session, error) {
 }
 
 func (a *App) CreateSession(name string) (Session, error) {
-	now := time.Now().UTC()
+	startedAt := time.Now()
+	now := startedAt.UTC()
 
 	a.mu.Lock()
 	if strings.TrimSpace(name) == "" {
@@ -105,6 +106,7 @@ func (a *App) CreateSession(name string) (Session, error) {
 	}
 
 	a.emitSessionUpdated(session)
+	go a.discoverCodexSessionID(session.ID, startedAt)
 	return session, nil
 }
 
@@ -260,6 +262,48 @@ func (a *App) emitSessionUpdated(session Session) {
 		return
 	}
 	runtime.EventsEmit(a.ctx, "session:updated", session)
+}
+
+func (a *App) discoverCodexSessionID(sessionID string, startedAt time.Time) {
+	root := defaultCodexSessionRoot()
+	if root == "" {
+		return
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		meta, err := FindCodexSessionMetaAfter(root, startedAt, a.workDir)
+		if err == nil && meta.ID != "" {
+			a.saveCodexSessionID(sessionID, meta.ID)
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func (a *App) saveCodexSessionID(sessionID string, codexSessionID string) {
+	a.mu.Lock()
+	index := a.sessionIndexLocked(sessionID)
+	if index < 0 {
+		a.mu.Unlock()
+		return
+	}
+	a.sessions.sessions[index].CodexSessionID = codexSessionID
+	a.sessions.sessions[index].LastActiveAt = time.Now().UTC()
+	session := a.sessions.sessions[index]
+	err := a.sessions.SaveSessions(a.sessions.sessions)
+	a.mu.Unlock()
+	if err == nil {
+		a.emitSessionUpdated(session)
+	}
+}
+
+func defaultCodexSessionRoot() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, ".codex", "sessions")
 }
 
 func contextOrBackground(ctx context.Context) context.Context {
