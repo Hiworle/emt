@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestNormalizeRunningSessionsMarksRunningIdle(t *testing.T) {
 	sessions := []Session{
@@ -29,5 +32,35 @@ func TestNextSessionName(t *testing.T) {
 
 	if got := nextSessionName(sessions); got != "Session 3" {
 		t.Fatalf("got %q, want %q", got, "Session 3")
+	}
+}
+
+func TestResolveWorkingDirUsesProvidedDir(t *testing.T) {
+	app := &App{workDir: "/startup"}
+	got, err := app.resolveWorkingDir(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if got == "/startup" {
+		t.Fatalf("expected provided dir, got startup dir")
+	}
+}
+
+func TestResolveWorkingDirFallsBackToStartupDir(t *testing.T) {
+	dir := t.TempDir()
+	app := &App{workDir: dir}
+	got, err := app.resolveWorkingDir("")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if got != dir {
+		t.Fatalf("got %q, want %q", got, dir)
+	}
+}
+
+func TestResolveWorkingDirRejectsMissingDir(t *testing.T) {
+	app := &App{workDir: t.TempDir()}
+	if _, err := app.resolveWorkingDir(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatalf("expected missing dir error")
 	}
 }

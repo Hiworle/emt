@@ -67,9 +67,13 @@ func (a *App) ListSessions() ([]Session, error) {
 	return append([]Session(nil), a.sessions.sessions...), nil
 }
 
-func (a *App) CreateSession(name string) (Session, error) {
+func (a *App) CreateSession(name string, workingDir string) (Session, error) {
 	startedAt := time.Now()
 	now := startedAt.UTC()
+	resolvedWorkingDir, err := a.resolveWorkingDir(workingDir)
+	if err != nil {
+		return Session{}, err
+	}
 
 	a.mu.Lock()
 	if strings.TrimSpace(name) == "" {
@@ -80,7 +84,8 @@ func (a *App) CreateSession(name string) (Session, error) {
 	session := Session{
 		ID:           fmt.Sprintf("emt-%d", now.UnixNano()),
 		Name:         name,
-		WorkingDir:   a.workDir,
+		WorkingDir:   resolvedWorkingDir,
+		Source:       SessionSourceEMT,
 		CreatedAt:    now,
 		LastActiveAt: now,
 		Status:       SessionStatusIdle,
@@ -98,7 +103,7 @@ func (a *App) CreateSession(name string) (Session, error) {
 
 	a.mu.Lock()
 	updated := append(append([]Session(nil), a.sessions.sessions...), session)
-	err := a.sessions.SaveSessions(updated)
+	err = a.sessions.SaveSessions(updated)
 	a.mu.Unlock()
 	if err != nil {
 		_ = ptyManager.Close(session.ID)
@@ -106,7 +111,7 @@ func (a *App) CreateSession(name string) (Session, error) {
 	}
 
 	a.emitSessionUpdated(session)
-	go a.discoverCodexSessionID(session.ID, startedAt)
+	go a.discoverCodexSessionID(session.ID, startedAt, session.WorkingDir)
 	return session, nil
 }
 
@@ -181,6 +186,61 @@ func (a *App) CloseSession(id string) error {
 
 	a.emitSessionUpdated(session)
 	return nil
+}
+
+func (a *App) ImportCodexSessions() (ImportResult, error) {
+	root := defaultCodexSessionRoot()
+	if root == "" {
+		return ImportResult{}, nil
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.sessions.ImportCodexSessions(root)
+}
+
+func (a *App) RenameSession(id string, name string) (Session, error) {
+	a.mu.Lock()
+	session, err := a.sessions.RenameSession(id, name)
+	a.mu.Unlock()
+	if err != nil {
+		return Session{}, err
+	}
+
+	a.emitSessionUpdated(session)
+	return session, nil
+}
+
+func (a *App) DeleteSession(id string) (Session, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.sessions.DeleteSession(id)
+}
+
+func (a *App) ChooseWorkingDir(defaultDir string) (string, error) {
+	options := runtime.OpenDialogOptions{}
+	defaultDir = strings.TrimSpace(defaultDir)
+	if defaultDir != "" {
+		if info, err := os.Stat(defaultDir); err == nil && info.IsDir() {
+			options.DefaultDirectory = defaultDir
+		}
+	}
+	return runtime.OpenDirectoryDialog(a.ctx, options)
+}
+
+func (a *App) resolveWorkingDir(workingDir string) (string, error) {
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		workingDir = a.workDir
+	}
+	info, err := os.Stat(workingDir)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%q is not a directory", workingDir)
+	}
+	return workingDir, nil
 }
 
 func (a *App) SendInput(id string, data string) error {
@@ -264,7 +324,7 @@ func (a *App) emitSessionUpdated(session Session) {
 	runtime.EventsEmit(a.ctx, "session:updated", session)
 }
 
-func (a *App) discoverCodexSessionID(sessionID string, startedAt time.Time) {
+func (a *App) discoverCodexSessionID(sessionID string, startedAt time.Time, workingDir string) {
 	root := defaultCodexSessionRoot()
 	if root == "" {
 		return
@@ -272,23 +332,24 @@ func (a *App) discoverCodexSessionID(sessionID string, startedAt time.Time) {
 
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		meta, err := FindCodexSessionMetaAfter(root, startedAt, a.workDir)
+		meta, err := FindCodexSessionMetaAfter(root, startedAt, workingDir)
 		if err == nil && meta.ID != "" {
-			a.saveCodexSessionID(sessionID, meta.ID)
+			a.saveCodexSessionMeta(sessionID, meta)
 			return
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
 }
 
-func (a *App) saveCodexSessionID(sessionID string, codexSessionID string) {
+func (a *App) saveCodexSessionMeta(sessionID string, meta CodexSessionMeta) {
 	a.mu.Lock()
 	index := a.sessionIndexLocked(sessionID)
 	if index < 0 {
 		a.mu.Unlock()
 		return
 	}
-	a.sessions.sessions[index].CodexSessionID = codexSessionID
+	a.sessions.sessions[index].CodexSessionID = meta.ID
+	a.sessions.sessions[index].CodexSessionPath = meta.Path
 	a.sessions.sessions[index].LastActiveAt = time.Now().UTC()
 	session := a.sessions.sessions[index]
 	err := a.sessions.SaveSessions(a.sessions.sessions)
