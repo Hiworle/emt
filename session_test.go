@@ -235,6 +235,74 @@ func TestImportCodexSessionsCountsFailures(t *testing.T) {
 	}
 }
 
+func TestRenameSessionRejectsEmptyName(t *testing.T) {
+	manager := NewSessionManager(filepath.Join(t.TempDir(), "sessions.json"), "/tmp/work")
+	now := time.Now().UTC()
+	if err := manager.SaveSessions([]Session{{
+		ID: "emt-1", Name: "Old", WorkingDir: "/tmp/work", Source: SessionSourceEMT,
+		CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle,
+	}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if _, err := manager.RenameSession("emt-1", " "); err == nil {
+		t.Fatalf("expected empty name error")
+	}
+}
+
+func TestRenameSessionPersistsName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	manager := NewSessionManager(path, "/tmp/work")
+	now := time.Now().UTC()
+	_ = manager.SaveSessions([]Session{{
+		ID: "emt-1", Name: "Old", WorkingDir: "/tmp/work", Source: SessionSourceEMT,
+		CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle,
+	}})
+
+	session, err := manager.RenameSession("emt-1", "New")
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if session.Name != "New" {
+		t.Fatalf("expected renamed session, got %q", session.Name)
+	}
+
+	reloaded := NewSessionManager(path, "/tmp/work")
+	sessions, err := reloaded.LoadSessions()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if sessions[0].Name != "New" {
+		t.Fatalf("expected persisted name, got %q", sessions[0].Name)
+	}
+}
+
+func TestDeleteSessionRemovesOnlyIndex(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "sessions.json")
+	jsonlPath := filepath.Join(dir, "rollout.jsonl")
+	if err := os.WriteFile(jsonlPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	now := time.Now().UTC()
+	_ = manager.SaveSessions([]Session{{
+		ID: "emt-1", Name: "Old", CodexSessionPath: jsonlPath, WorkingDir: "/tmp/work",
+		Source: SessionSourceImported, CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle,
+	}})
+
+	if _, err := manager.DeleteSession("emt-1"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if len(manager.sessions) != 0 {
+		t.Fatalf("expected empty sessions, got %d", len(manager.sessions))
+	}
+	if _, err := os.Stat(jsonlPath); err != nil {
+		t.Fatalf("expected jsonl to remain: %v", err)
+	}
+}
+
 func writeCodexMeta(t *testing.T, root string, name string, id string, cwd string, timestamp string) string {
 	t.Helper()
 	path := filepath.Join(root, "2026", "05", "27", name)

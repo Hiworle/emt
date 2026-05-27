@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -103,6 +104,44 @@ func normalizeSession(session *Session) {
 	if session.Status == SessionStatusRunning {
 		session.Status = SessionStatusIdle
 	}
+}
+
+func (m *SessionManager) RenameSession(id string, name string) (Session, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Session{}, errors.New("session name cannot be empty")
+	}
+
+	for i := range m.sessions {
+		if m.sessions[i].ID != id {
+			continue
+		}
+		sessions := append([]Session(nil), m.sessions...)
+		sessions[i].Name = name
+		if err := m.SaveSessions(sessions); err != nil {
+			return Session{}, err
+		}
+		return m.sessions[i], nil
+	}
+
+	return Session{}, fmt.Errorf("session %q not found", id)
+}
+
+func (m *SessionManager) DeleteSession(id string) (Session, error) {
+	for i := range m.sessions {
+		if m.sessions[i].ID != id {
+			continue
+		}
+		deleted := m.sessions[i]
+		sessions := append([]Session(nil), m.sessions[:i]...)
+		sessions = append(sessions, m.sessions[i+1:]...)
+		if err := m.SaveSessions(sessions); err != nil {
+			return Session{}, err
+		}
+		return deleted, nil
+	}
+
+	return Session{}, fmt.Errorf("session %q not found", id)
 }
 
 func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) {
