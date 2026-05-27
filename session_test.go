@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -168,4 +169,81 @@ func TestFindCodexSessionMetaAfter(t *testing.T) {
 	if meta.ID != "019d-new" {
 		t.Fatalf("got %q", meta.ID)
 	}
+}
+
+func TestImportCodexSessionsAddsNewSessions(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	writeCodexMeta(t, root, "a.jsonl", "019d-a", "/tmp/project-a", "2026-05-27T01:00:00Z")
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	if _, err := manager.LoadSessions(); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	result, err := manager.ImportCodexSessions(root)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if result.Imported != 1 || result.Skipped != 0 || result.Failed != 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if len(manager.sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(manager.sessions))
+	}
+	if manager.sessions[0].Source != SessionSourceImported {
+		t.Fatalf("expected imported source, got %q", manager.sessions[0].Source)
+	}
+	if manager.sessions[0].CodexSessionPath == "" {
+		t.Fatalf("expected codex session path")
+	}
+}
+
+func TestImportCodexSessionsIsIdempotent(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	writeCodexMeta(t, root, "a.jsonl", "019d-a", "/tmp/project-a", "2026-05-27T01:00:00Z")
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	_, _ = manager.LoadSessions()
+	if _, err := manager.ImportCodexSessions(root); err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	result, err := manager.ImportCodexSessions(root)
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+	if result.Imported != 0 || result.Skipped != 1 || len(manager.sessions) != 1 {
+		t.Fatalf("unexpected idempotent result: %+v len=%d", result, len(manager.sessions))
+	}
+}
+
+func TestImportCodexSessionsCountsFailures(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "bad.jsonl"), []byte("{bad"), 0o600); err != nil {
+		t.Fatalf("write bad jsonl: %v", err)
+	}
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	_, _ = manager.LoadSessions()
+	result, err := manager.ImportCodexSessions(root)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if result.Failed != 1 {
+		t.Fatalf("expected 1 failed, got %+v", result)
+	}
+}
+
+func writeCodexMeta(t *testing.T, root string, name string, id string, cwd string, timestamp string) string {
+	t.Helper()
+	path := filepath.Join(root, "2026", "05", "27", name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	line := fmt.Sprintf(`{"timestamp":%q,"type":"session_meta","payload":{"id":%q,"cwd":%q}}`, timestamp, id, cwd) + "\n"
+	if err := os.WriteFile(path, []byte(line), 0o600); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+	return path
 }

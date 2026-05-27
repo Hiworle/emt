@@ -37,6 +37,12 @@ type sessionFile struct {
 	Sessions []Session `json:"sessions"`
 }
 
+type ImportResult struct {
+	Imported int `json:"imported"`
+	Skipped  int `json:"skipped"`
+	Failed   int `json:"failed"`
+}
+
 type SessionManager struct {
 	path       string
 	workingDir string
@@ -97,6 +103,99 @@ func normalizeSession(session *Session) {
 	if session.Status == SessionStatusRunning {
 		session.Status = SessionStatusIdle
 	}
+}
+
+func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) {
+	var result ImportResult
+
+	info, err := os.Stat(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return result, nil
+	}
+	if err != nil {
+		return result, err
+	}
+	if !info.IsDir() {
+		return result, nil
+	}
+
+	existingCodexIDs := make(map[string]bool, len(m.sessions))
+	existingSessionIDs := make(map[string]bool, len(m.sessions))
+	for _, session := range m.sessions {
+		if session.CodexSessionID != "" {
+			existingCodexIDs[session.CodexSessionID] = true
+		}
+		existingSessionIDs[session.ID] = true
+	}
+
+	sessions := append([]Session(nil), m.sessions...)
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			result.Failed++
+			return nil
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".jsonl" {
+			return nil
+		}
+
+		meta, err := ParseCodexSessionMeta(path)
+		if err != nil {
+			result.Failed++
+			return nil
+		}
+		if existingCodexIDs[meta.ID] {
+			result.Skipped++
+			return nil
+		}
+
+		session := Session{
+			ID:               importedSessionID(meta.ID, existingSessionIDs),
+			Name:             importedSessionName(meta),
+			CodexSessionID:   meta.ID,
+			CodexSessionPath: meta.Path,
+			WorkingDir:       meta.CWD,
+			Source:           SessionSourceImported,
+			CreatedAt:        meta.Timestamp,
+			LastActiveAt:     meta.ModTime,
+			Status:           SessionStatusIdle,
+		}
+		sessions = append(sessions, session)
+		existingCodexIDs[meta.ID] = true
+		existingSessionIDs[session.ID] = true
+		result.Imported++
+		return nil
+	}); err != nil {
+		return result, err
+	}
+
+	if result.Imported == 0 {
+		return result, nil
+	}
+	if err := m.SaveSessions(sessions); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func importedSessionID(codexSessionID string, existing map[string]bool) string {
+	base := "imported-" + codexSessionID
+	id := base
+	for suffix := 2; existing[id]; suffix++ {
+		id = fmt.Sprintf("%s-%d", base, suffix)
+	}
+	return id
+}
+
+func importedSessionName(meta CodexSessionMeta) string {
+	timestamp := meta.Timestamp
+	if timestamp.IsZero() {
+		timestamp = meta.ModTime
+	}
+	suffix := timestamp.Format("2006-01-02 15:04")
+	if meta.CWD == "" {
+		return "Imported " + suffix
+	}
+	return fmt.Sprintf("%s %s", filepath.Base(meta.CWD), suffix)
 }
 
 type CodexSessionMeta struct {
