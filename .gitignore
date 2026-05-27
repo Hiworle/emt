@@ -1,5 +1,6 @@
 # Build output
 build/bin/
+.worktrees/
 
 # Frontend
 node_modules/
