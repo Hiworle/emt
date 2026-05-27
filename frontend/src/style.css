@@ -1,26 +1,263 @@
-html {
-    background-color: rgba(27, 38, 54, 1);
-    text-align: center;
-    color: white;
-}
-
-body {
-    margin: 0;
-    color: white;
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
-}
-
 @font-face {
-    font-family: "Nunito";
-    font-style: normal;
-    font-weight: 400;
-    src: local(""),
-    url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
+  font-family: "Nunito";
+  font-style: normal;
+  font-weight: 400;
+  src: local(""), url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
 }
 
+:root {
+  font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #e7edf3;
+  background: #0b0d10;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
 #app {
-    height: 100vh;
-    text-align: center;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  min-width: 0;
+  overflow: hidden;
+  background: #0b0d10;
+}
+
+.sidebar {
+  display: flex;
+  flex: 0 0 260px;
+  flex-direction: column;
+  min-width: 220px;
+  border-right: 1px solid #2a2f36;
+  background: #171a1f;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 14px 0 16px;
+  border-bottom: 1px solid #2a2f36;
+}
+
+.brand {
+  color: #f4f7fa;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.icon-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #39414b;
+  border-radius: 6px;
+  color: #f4f7fa;
+  background: #235b4a;
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: #2d725e;
+}
+
+.session-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  min-height: 48px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px 6px 7px 10px;
+  color: #cbd5df;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-row:hover {
+  background: #20252c;
+}
+
+.session-row.selected {
+  border-color: #4a6f7c;
+  background: #25313a;
+}
+
+.session-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-name {
+  overflow: hidden;
+  color: #f3f6f8;
+  font-size: 14px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-status {
+  width: fit-content;
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: #0f1318;
+  background: #a7b0ba;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.session-status.running {
+  background: #54d38f;
+}
+
+.session-status.error {
+  background: #ff8f70;
+}
+
+.close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: #9aa5b1;
+}
+
+.close-button:hover {
+  color: #ffffff;
+  background: #553039;
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  background: #0b0d10;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  gap: 16px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #242a31;
+  background: #111418;
+}
+
+.session-title {
+  overflow: hidden;
+  max-width: 52vw;
+  color: #f3f6f8;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-path {
+  overflow: hidden;
+  max-width: 52vw;
+  color: #8995a3;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error-message {
+  overflow: hidden;
+  max-width: 38vw;
+  border: 1px solid #78424a;
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: #ffd8d2;
+  background: #351b22;
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-panel {
+  flex: 1;
+  min-height: 0;
+  background: #0b0d10;
+}
+
+.terminal-host {
+  width: 100%;
+  height: 100%;
+  padding: 10px 12px;
+}
+
+.terminal-host .xterm {
+  height: 100%;
+}
+
+.empty-terminal {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: #7f8994;
+  background: #0b0d10;
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .sidebar {
+    flex-basis: 212px;
+    min-width: 190px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .session-title,
+  .session-path,
+  .error-message {
+    max-width: calc(100vw - 236px);
+  }
 }
