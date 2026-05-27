@@ -19,6 +19,8 @@ const emit = defineEmits<{
   (event: 'import-sessions'): void
   (event: 'select-session', id: string): void
   (event: 'close-session', id: string): void
+  (event: 'rename-session', id: string): void
+  (event: 'delete-session', id: string): void
   (event: 'update:search', value: string): void
 }>()
 
@@ -69,13 +71,30 @@ function handleSearchInput(event: Event) {
             </span>
           </span>
           <span class="session-actions">
-            <span
-              class="close-button"
+            <button
+              class="row-action"
+              type="button"
+              title="Rename session"
+              @click.stop="$emit('rename-session', session.id)"
+            >
+              Rename
+            </button>
+            <button
+              class="row-action"
+              type="button"
               title="Close session"
               @click.stop="$emit('close-session', session.id)"
             >
-              x
-            </span>
+              Close
+            </button>
+            <button
+              class="row-action danger"
+              type="button"
+              title="Delete session"
+              @click.stop="$emit('delete-session', session.id)"
+            >
+              Delete
+            </button>
           </span>
         </button>
       </section>

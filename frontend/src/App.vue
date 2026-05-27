@@ -4,13 +4,16 @@ import {
   ChooseWorkingDir,
   CloseSession,
   CreateSession,
+  DeleteSession,
   ImportCodexSessions,
   ListSessions,
+  RenameSession,
   ResumeSession,
 } from '../wailsjs/go/main/App'
 import * as models from '../wailsjs/go/models'
 import { EventsOff, EventsOn } from '../wailsjs/runtime/runtime'
 import NewSessionDialog from './components/NewSessionDialog.vue'
+import RenameSessionDialog from './components/RenameSessionDialog.vue'
 import Sidebar from './components/Sidebar.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
 
@@ -29,8 +32,13 @@ const notice = ref('')
 const importing = ref(false)
 const newDialogOpen = ref(false)
 const defaultWorkingDir = ref('')
+const renameDialogOpen = ref(false)
+const renamingSessionId = ref('')
 
 const selectedSession = computed(() => sessions.value.find((session) => session.id === selectedId.value))
+const renamingSession = computed(() =>
+  sessions.value.find((session) => session.id === renamingSessionId.value),
+)
 const groupedSessions = computed<SessionGroup[]>(() => {
   const query = search.value.trim().toLowerCase()
   const groups = new Map<string, SessionGroup>()
@@ -174,6 +182,51 @@ async function closeSession(id: string) {
   }
 }
 
+function openRenameDialog(id: string) {
+  const session = sessions.value.find((item) => item.id === id)
+  if (!session) {
+    return
+  }
+  renamingSessionId.value = id
+  renameDialogOpen.value = true
+  error.value = ''
+  notice.value = ''
+}
+
+async function renameSession(name: string) {
+  if (!renamingSessionId.value) {
+    return
+  }
+  error.value = ''
+  notice.value = ''
+  try {
+    const session = await RenameSession(renamingSessionId.value, name)
+    upsertSession(session)
+    renameDialogOpen.value = false
+    renamingSessionId.value = ''
+  } catch (err) {
+    error.value = String(err)
+  }
+}
+
+async function deleteSession(id: string) {
+  if (!window.confirm('Remove this session from EMT? Codex history files will not be deleted.')) {
+    return
+  }
+
+  error.value = ''
+  notice.value = ''
+  try {
+    await DeleteSession(id)
+    sessions.value = sessions.value.filter((session) => session.id !== id)
+    if (selectedId.value === id) {
+      selectedId.value = sessions.value[0]?.id || ''
+    }
+  } catch (err) {
+    error.value = String(err)
+  }
+}
+
 function handleSessionUpdated(session: Session) {
   upsertSession(session)
 }
@@ -207,6 +260,8 @@ onUnmounted(() => {
       @new-session="openNewSessionDialog"
       @select-session="selectSession"
       @close-session="closeSession"
+      @rename-session="openRenameDialog"
+      @delete-session="deleteSession"
     />
 
     <main class="workspace">
@@ -231,6 +286,12 @@ onUnmounted(() => {
       @close="newDialogOpen = false"
       @create="createSession"
       @browse="browseWorkingDir"
+    />
+    <RenameSessionDialog
+      :open="renameDialogOpen"
+      :name="renamingSession?.name || ''"
+      @close="renameDialogOpen = false"
+      @rename="renameSession"
     />
   </div>
 </template>
