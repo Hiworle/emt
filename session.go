@@ -100,11 +100,19 @@ func normalizeSession(session *Session) {
 }
 
 type CodexSessionMeta struct {
-	ID  string
-	CWD string
+	ID        string
+	CWD       string
+	Path      string
+	Timestamp time.Time
+	ModTime   time.Time
 }
 
 func ParseCodexSessionMeta(path string) (CodexSessionMeta, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return CodexSessionMeta{}, err
+	}
+
 	file, err := os.Open(path)
 	if err != nil {
 		return CodexSessionMeta{}, err
@@ -114,8 +122,9 @@ func ParseCodexSessionMeta(path string) (CodexSessionMeta, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		var line struct {
-			Type    string `json:"type"`
-			Payload struct {
+			Timestamp string `json:"timestamp"`
+			Type      string `json:"type"`
+			Payload   struct {
 				ID  string `json:"id"`
 				CWD string `json:"cwd"`
 			} `json:"payload"`
@@ -124,7 +133,17 @@ func ParseCodexSessionMeta(path string) (CodexSessionMeta, error) {
 			continue
 		}
 		if line.Type == "session_meta" && line.Payload.ID != "" {
-			return CodexSessionMeta{ID: line.Payload.ID, CWD: line.Payload.CWD}, nil
+			timestamp, _ := time.Parse(time.RFC3339Nano, line.Timestamp)
+			if timestamp.IsZero() {
+				timestamp = info.ModTime()
+			}
+			return CodexSessionMeta{
+				ID:        line.Payload.ID,
+				CWD:       line.Payload.CWD,
+				Path:      path,
+				Timestamp: timestamp,
+				ModTime:   info.ModTime(),
+			}, nil
 		}
 	}
 	if err := scanner.Err(); err != nil {

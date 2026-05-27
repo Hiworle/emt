@@ -109,6 +109,47 @@ func TestParseCodexSessionMeta(t *testing.T) {
 	}
 }
 
+func TestParseCodexSessionMetaIncludesTimestampAndPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	line := `{"timestamp":"2026-05-27T01:00:00Z","type":"session_meta","payload":{"id":"019d-meta","cwd":"/tmp/work"}}` + "\n"
+	if err := os.WriteFile(path, []byte(line), 0o600); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	meta, err := ParseCodexSessionMeta(path)
+	if err != nil {
+		t.Fatalf("parse meta: %v", err)
+	}
+	if meta.ID != "019d-meta" || meta.CWD != "/tmp/work" || meta.Path != path {
+		t.Fatalf("unexpected meta: %+v", meta)
+	}
+	if meta.Timestamp.IsZero() {
+		t.Fatalf("expected timestamp")
+	}
+	if meta.ModTime.IsZero() {
+		t.Fatalf("expected mod time")
+	}
+}
+
+func TestParseCodexSessionMetaFallsBackToModTime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	line := `{"type":"session_meta","payload":{"id":"019d-meta","cwd":"/tmp/work"}}` + "\n"
+	if err := os.WriteFile(path, []byte(line), 0o600); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	meta, err := ParseCodexSessionMeta(path)
+	if err != nil {
+		t.Fatalf("parse meta: %v", err)
+	}
+	if meta.Timestamp.IsZero() {
+		t.Fatalf("expected fallback timestamp")
+	}
+	if !meta.Timestamp.Equal(meta.ModTime) {
+		t.Fatalf("expected timestamp %v to equal mod time %v", meta.Timestamp, meta.ModTime)
+	}
+}
+
 func TestFindCodexSessionMetaAfter(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "2026", "05", "27", "rollout.jsonl")
