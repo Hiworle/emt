@@ -16,14 +16,21 @@ const (
 	SessionStatusError   = "error"
 )
 
+const (
+	SessionSourceEMT      = "emt"
+	SessionSourceImported = "imported"
+)
+
 type Session struct {
-	ID             string    `json:"id"`
-	Name           string    `json:"name"`
-	CodexSessionID string    `json:"codex_session_id"`
-	WorkingDir     string    `json:"working_dir"`
-	CreatedAt      time.Time `json:"created_at"`
-	LastActiveAt   time.Time `json:"last_active_at"`
-	Status         string    `json:"status"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	CodexSessionID   string    `json:"codex_session_id"`
+	CodexSessionPath string    `json:"codex_session_path"`
+	WorkingDir       string    `json:"working_dir"`
+	Source           string    `json:"source"`
+	CreatedAt        time.Time `json:"created_at"`
+	LastActiveAt     time.Time `json:"last_active_at"`
+	Status           string    `json:"status"`
 }
 
 type sessionFile struct {
@@ -58,6 +65,10 @@ func (m *SessionManager) LoadSessions() ([]Session, error) {
 		return nil, nil
 	}
 
+	for i := range file.Sessions {
+		normalizeSession(&file.Sessions[i])
+	}
+
 	m.sessions = file.Sessions
 	return append([]Session(nil), m.sessions...), nil
 }
@@ -77,6 +88,15 @@ func (m *SessionManager) SaveSessions(sessions []Session) error {
 
 	m.sessions = append([]Session(nil), sessions...)
 	return nil
+}
+
+func normalizeSession(session *Session) {
+	if session.Source == "" {
+		session.Source = SessionSourceEMT
+	}
+	if session.Status == SessionStatusRunning {
+		session.Status = SessionStatusIdle
+	}
 }
 
 type CodexSessionMeta struct {

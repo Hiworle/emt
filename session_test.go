@@ -38,6 +38,36 @@ func TestSessionStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLoadSessionsNormalizesPhase1Records(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	data := []byte(`{
+	  "sessions": [{
+	    "id": "emt-1",
+	    "name": "Session 1",
+	    "codex_session_id": "019d-old",
+	    "working_dir": "/tmp/work",
+	    "created_at": "2026-05-27T01:00:00Z",
+	    "last_active_at": "2026-05-27T01:10:00Z",
+	    "status": "running"
+	  }]
+	}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+
+	manager := NewSessionManager(path, "/tmp/work")
+	sessions, err := manager.LoadSessions()
+	if err != nil {
+		t.Fatalf("load sessions: %v", err)
+	}
+	if sessions[0].Source != SessionSourceEMT {
+		t.Fatalf("expected source %q, got %q", SessionSourceEMT, sessions[0].Source)
+	}
+	if sessions[0].Status != SessionStatusIdle {
+		t.Fatalf("expected status %q, got %q", SessionStatusIdle, sessions[0].Status)
+	}
+}
+
 func TestSessionStoreBacksUpCorruptJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sessions.json")
