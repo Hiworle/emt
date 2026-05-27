@@ -42,9 +42,9 @@ button {
 
 .sidebar {
   display: flex;
-  flex: 0 0 260px;
+  flex: 0 0 300px;
   flex-direction: column;
-  min-width: 220px;
+  min-width: 240px;
   border-right: 1px solid #2a2f36;
   background: #171a1f;
 }
@@ -65,35 +65,98 @@ button {
   letter-spacing: 0;
 }
 
-.icon-button {
-  width: 32px;
+.primary-button,
+.secondary-button {
   height: 32px;
   border: 1px solid #39414b;
   border-radius: 6px;
   color: #f4f7fa;
-  background: #235b4a;
+  font-size: 13px;
+  line-height: 18px;
   cursor: pointer;
 }
 
-.icon-button:hover {
+.primary-button {
+  padding: 0 11px;
+  background: #235b4a;
+}
+
+.primary-button:hover {
   background: #2d725e;
+}
+
+.secondary-button {
+  flex: 0 0 auto;
+  padding: 0 10px;
+  background: #222831;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: #2c3440;
+}
+
+.secondary-button:disabled {
+  color: #7e8996;
+  cursor: default;
+}
+
+.sidebar-tools {
+  display: flex;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid #242a31;
+}
+
+.search-input {
+  min-width: 0;
+  flex: 1;
+  height: 32px;
+  border: 1px solid #343c46;
+  border-radius: 6px;
+  padding: 0 9px;
+  color: #e7edf3;
+  background: #111418;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #4a6f7c;
 }
 
 .session-list {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 10px;
   min-height: 0;
   overflow-y: auto;
   padding: 8px;
 }
 
+.session-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.group-heading {
+  overflow: hidden;
+  padding: 5px 8px 3px;
+  color: #8b97a5;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr) 32px;
   align-items: center;
-  min-height: 48px;
+  min-height: 54px;
   width: 100%;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -118,6 +181,12 @@ button {
   min-width: 0;
   flex-direction: column;
   gap: 4px;
+}
+
+.session-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 
 .session-name {
@@ -147,6 +216,27 @@ button {
   background: #ff8f70;
 }
 
+.session-source {
+  width: fit-content;
+  border: 1px solid #3a434d;
+  border-radius: 4px;
+  padding: 0 6px;
+  color: #aeb8c4;
+  background: #15191f;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.session-source.imported {
+  border-color: #435c68;
+  color: #b7d3df;
+}
+
+.session-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .close-button {
   display: inline-flex;
   align-items: center;
@@ -160,6 +250,13 @@ button {
 .close-button:hover {
   color: #ffffff;
   background: #553039;
+}
+
+.sidebar-empty {
+  padding: 18px 10px;
+  color: #7f8994;
+  font-size: 13px;
+  text-align: center;
 }
 
 .workspace {
@@ -217,6 +314,20 @@ button {
   white-space: nowrap;
 }
 
+.notice-message {
+  overflow: hidden;
+  max-width: 38vw;
+  border: 1px solid #3a5b62;
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: #cef4f2;
+  background: #173034;
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .terminal-panel {
   flex: 1;
   min-height: 0;
@@ -245,8 +356,8 @@ button {
 
 @media (max-width: 720px) {
   .sidebar {
-    flex-basis: 212px;
-    min-width: 190px;
+    flex-basis: 238px;
+    min-width: 210px;
   }
 
   .topbar {
@@ -257,7 +368,8 @@ button {
 
   .session-title,
   .session-path,
-  .error-message {
-    max-width: calc(100vw - 236px);
+  .error-message,
+  .notice-message {
+    max-width: calc(100vw - 260px);
   }
 }
