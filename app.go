@@ -2,26 +2,294 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
 type App struct {
-	ctx context.Context
+	ctx      context.Context
+	workDir  string
+	sessions *SessionManager
+	pty      *PTYManager
+	mu       sync.Mutex
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	return &App{}
+	workDir, err := os.Getwd()
+	if err != nil {
+		workDir = "."
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = workDir
+	}
+
+	return &App{
+		workDir:  workDir,
+		sessions: NewSessionManager(filepath.Join(homeDir, ".emt", "sessions.json"), workDir),
+	}
 }
 
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.pty = NewPTYManager(a.emitTerminalData, a.handleTerminalExit)
+
+	sessions, err := a.sessions.LoadSessions()
+	if err != nil {
+		return
+	}
+	if normalizeRunningSessions(sessions) {
+		_ = a.sessions.SaveSessions(sessions)
+	}
 }
 
-// Greet returns a greeting for the given name
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
+func (a *App) shutdown(ctx context.Context) {
+	if a.pty != nil {
+		a.pty.CloseAll()
+	}
+}
+
+func (a *App) ListSessions() ([]Session, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]Session(nil), a.sessions.sessions...), nil
+}
+
+func (a *App) CreateSession(name string) (Session, error) {
+	now := time.Now().UTC()
+
+	a.mu.Lock()
+	if strings.TrimSpace(name) == "" {
+		name = nextSessionName(a.sessions.sessions)
+	} else {
+		name = strings.TrimSpace(name)
+	}
+	session := Session{
+		ID:           fmt.Sprintf("emt-%d", now.UnixNano()),
+		Name:         name,
+		WorkingDir:   a.workDir,
+		CreatedAt:    now,
+		LastActiveAt: now,
+		Status:       SessionStatusIdle,
+	}
+	ptyManager := a.ensurePTYLocked()
+	ctx := a.ctx
+	a.mu.Unlock()
+
+	if err := ptyManager.StartNew(contextOrBackground(ctx), session.ID, session.WorkingDir); err != nil {
+		return Session{}, err
+	}
+
+	session.Status = SessionStatusRunning
+	session.LastActiveAt = time.Now().UTC()
+
+	a.mu.Lock()
+	updated := append(append([]Session(nil), a.sessions.sessions...), session)
+	err := a.sessions.SaveSessions(updated)
+	a.mu.Unlock()
+	if err != nil {
+		_ = ptyManager.Close(session.ID)
+		return Session{}, err
+	}
+
+	a.emitSessionUpdated(session)
+	return session, nil
+}
+
+func (a *App) ResumeSession(id string) error {
+	a.mu.Lock()
+	index := a.sessionIndexLocked(id)
+	if index < 0 {
+		a.mu.Unlock()
+		return fmt.Errorf("session %q not found", id)
+	}
+	session := a.sessions.sessions[index]
+	ptyManager := a.ensurePTYLocked()
+	ctx := a.ctx
+	a.mu.Unlock()
+
+	if session.CodexSessionID == "" {
+		return errors.New("codex session id is empty")
+	}
+	if err := ptyManager.Resume(contextOrBackground(ctx), session); err != nil {
+		return err
+	}
+
+	a.mu.Lock()
+	index = a.sessionIndexLocked(id)
+	if index < 0 {
+		a.mu.Unlock()
+		return fmt.Errorf("session %q not found", id)
+	}
+	a.sessions.sessions[index].Status = SessionStatusRunning
+	a.sessions.sessions[index].LastActiveAt = time.Now().UTC()
+	session = a.sessions.sessions[index]
+	err := a.sessions.SaveSessions(a.sessions.sessions)
+	a.mu.Unlock()
+	if err != nil {
+		return err
+	}
+
+	a.emitSessionUpdated(session)
+	return nil
+}
+
+func (a *App) CloseSession(id string) error {
+	a.mu.Lock()
+	index := a.sessionIndexLocked(id)
+	if index < 0 {
+		a.mu.Unlock()
+		return fmt.Errorf("session %q not found", id)
+	}
+	ptyManager := a.pty
+	a.mu.Unlock()
+
+	if ptyManager != nil {
+		if err := ptyManager.Close(id); err != nil {
+			return err
+		}
+	}
+
+	a.mu.Lock()
+	index = a.sessionIndexLocked(id)
+	if index < 0 {
+		a.mu.Unlock()
+		return fmt.Errorf("session %q not found", id)
+	}
+	a.sessions.sessions[index].Status = SessionStatusIdle
+	a.sessions.sessions[index].LastActiveAt = time.Now().UTC()
+	session := a.sessions.sessions[index]
+	err := a.sessions.SaveSessions(a.sessions.sessions)
+	a.mu.Unlock()
+	if err != nil {
+		return err
+	}
+
+	a.emitSessionUpdated(session)
+	return nil
+}
+
+func (a *App) SendInput(id string, data string) error {
+	a.mu.Lock()
+	ptyManager := a.pty
+	a.mu.Unlock()
+	if ptyManager == nil {
+		return errors.New("terminal is not running")
+	}
+	return ptyManager.Write(id, data)
+}
+
+func (a *App) ResizeTerminal(id string, rows int, cols int) error {
+	a.mu.Lock()
+	ptyManager := a.pty
+	a.mu.Unlock()
+	if ptyManager == nil {
+		return errors.New("terminal is not running")
+	}
+	return ptyManager.Resize(id, rows, cols)
+}
+
+func (a *App) ensurePTYLocked() *PTYManager {
+	if a.pty == nil {
+		a.pty = NewPTYManager(a.emitTerminalData, a.handleTerminalExit)
+	}
+	return a.pty
+}
+
+func (a *App) sessionIndexLocked(id string) int {
+	for i := range a.sessions.sessions {
+		if a.sessions.sessions[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (a *App) emitTerminalData(sessionID string, data string) {
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, "terminal:data", terminalDataEvent{
+		SessionID: sessionID,
+		Data:      data,
+	})
+}
+
+func (a *App) handleTerminalExit(sessionID string, err error) {
+	if a.ctx != nil {
+		message := ""
+		if err != nil {
+			message = err.Error()
+		}
+		runtime.EventsEmit(a.ctx, "terminal:exit", terminalExitEvent{
+			SessionID: sessionID,
+			Error:     message,
+		})
+	}
+
+	a.mu.Lock()
+	index := a.sessionIndexLocked(sessionID)
+	if index < 0 {
+		a.mu.Unlock()
+		return
+	}
+	a.sessions.sessions[index].Status = SessionStatusIdle
+	a.sessions.sessions[index].LastActiveAt = time.Now().UTC()
+	session := a.sessions.sessions[index]
+	saveErr := a.sessions.SaveSessions(a.sessions.sessions)
+	a.mu.Unlock()
+	if saveErr == nil {
+		a.emitSessionUpdated(session)
+	}
+}
+
+func (a *App) emitSessionUpdated(session Session) {
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, "session:updated", session)
+}
+
+func contextOrBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+func normalizeRunningSessions(sessions []Session) bool {
+	changed := false
+	for i := range sessions {
+		if sessions[i].Status == SessionStatusRunning {
+			sessions[i].Status = SessionStatusIdle
+			changed = true
+		}
+	}
+	return changed
+}
+
+func nextSessionName(sessions []Session) string {
+	return fmt.Sprintf("Session %d", len(sessions)+1)
+}
+
+type terminalDataEvent struct {
+	SessionID string `json:"sessionId"`
+	Data      string `json:"data"`
+}
+
+type terminalExitEvent struct {
+	SessionID string `json:"sessionId"`
+	Error     string `json:"error"`
 }
