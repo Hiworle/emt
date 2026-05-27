@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
+  ChooseWorkingDir,
   CloseSession,
   CreateSession,
   ImportCodexSessions,
@@ -9,6 +10,7 @@ import {
 } from '../wailsjs/go/main/App'
 import * as models from '../wailsjs/go/models'
 import { EventsOff, EventsOn } from '../wailsjs/runtime/runtime'
+import NewSessionDialog from './components/NewSessionDialog.vue'
 import Sidebar from './components/Sidebar.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
 
@@ -25,6 +27,8 @@ const error = ref('')
 const search = ref('')
 const notice = ref('')
 const importing = ref(false)
+const newDialogOpen = ref(false)
+const defaultWorkingDir = ref('')
 
 const selectedSession = computed(() => sessions.value.find((session) => session.id === selectedId.value))
 const groupedSessions = computed<SessionGroup[]>(() => {
@@ -96,13 +100,33 @@ async function loadSessions() {
   }
 }
 
-async function createSession() {
+function openNewSessionDialog() {
+  defaultWorkingDir.value = selectedSession.value?.working_dir || ''
+  newDialogOpen.value = true
+}
+
+async function createSession(payload: { name: string; workingDir: string }) {
   error.value = ''
   notice.value = ''
   try {
-    const session = await CreateSession('', '')
+    const session = await CreateSession(payload.name, payload.workingDir)
     upsertSession(session)
     selectedId.value = session.id
+    defaultWorkingDir.value = session.working_dir
+    newDialogOpen.value = false
+  } catch (err) {
+    error.value = String(err)
+  }
+}
+
+async function browseWorkingDir(currentDir: string) {
+  error.value = ''
+  notice.value = ''
+  try {
+    const directory = await ChooseWorkingDir(currentDir || defaultWorkingDir.value)
+    if (directory) {
+      defaultWorkingDir.value = directory
+    }
   } catch (err) {
     error.value = String(err)
   }
@@ -180,7 +204,7 @@ onUnmounted(() => {
       :importing="importing"
       :selected-id="selectedId"
       @import-sessions="importSessions"
-      @new-session="createSession"
+      @new-session="openNewSessionDialog"
       @select-session="selectSession"
       @close-session="closeSession"
     />
@@ -200,5 +224,13 @@ onUnmounted(() => {
       <TerminalPanel v-if="selectedId" :key="selectedId" :session-id="selectedId" />
       <div v-else class="empty-terminal">No session selected</div>
     </main>
+
+    <NewSessionDialog
+      :open="newDialogOpen"
+      :default-working-dir="defaultWorkingDir"
+      @close="newDialogOpen = false"
+      @create="createSession"
+      @browse="browseWorkingDir"
+    />
   </div>
 </template>
