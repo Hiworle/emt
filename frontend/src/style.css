@@ -85,6 +85,12 @@ button {
   background: #2d725e;
 }
 
+.primary-button:disabled {
+  color: #8da09a;
+  background: #1c3d33;
+  cursor: default;
+}
+
 .secondary-button {
   flex: 0 0 auto;
   padding: 0 10px;
@@ -514,6 +520,15 @@ button {
   background: #20252c;
 }
 
+.import-row:not(.import-row-header) {
+  cursor: pointer;
+}
+
+.import-row:focus-visible {
+  outline: 1px solid #4a6f7c;
+  outline-offset: -1px;
+}
+
 .import-row-header {
   position: sticky;
   top: 0;
@@ -525,6 +540,7 @@ button {
 
 .import-row.existing {
   color: #7e8996;
+  cursor: default;
 }
 
 .import-name,

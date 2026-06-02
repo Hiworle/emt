@@ -27,6 +27,7 @@ const search = ref('')
 const timeFilter = ref<'7d' | '30d' | 'all'>('30d')
 const workingDirFilter = ref('')
 const showExisting = ref(false)
+const previewRequestId = ref(0)
 
 const directoryOptions = computed(() => {
   const values = new Set<string>()
@@ -68,6 +69,8 @@ watch(
   () => props.open,
   async (open) => {
     if (!open) {
+      previewRequestId.value += 1
+      loading.value = false
       return
     }
     resetFilters()
@@ -80,21 +83,36 @@ function resetFilters() {
   timeFilter.value = '30d'
   workingDirFilter.value = ''
   showExisting.value = false
+  sessions.value = []
+  failed.value = 0
   selectedIds.value = new Set()
 }
 
 async function loadPreview() {
+  const requestId = previewRequestId.value + 1
+  previewRequestId.value = requestId
   loading.value = true
   try {
     const result = await PreviewCodexSessions()
+    if (requestId !== previewRequestId.value) {
+      return
+    }
     sessions.value = result.sessions.map((session) =>
       models.main.ImportPreviewSession.createFrom(session),
     )
     failed.value = result.failed || 0
   } catch (err) {
+    if (requestId !== previewRequestId.value) {
+      return
+    }
+    sessions.value = []
+    failed.value = 0
+    selectedIds.value = new Set()
     emit('error', String(err))
   } finally {
-    loading.value = false
+    if (requestId === previewRequestId.value) {
+      loading.value = false
+    }
   }
 }
 
@@ -133,7 +151,7 @@ function isSelected(id: string): boolean {
 }
 
 function toggleSelection(session: ImportPreviewSession) {
-  if (session.status !== 'new') {
+  if (loading.value || session.status !== 'new') {
     return
   }
   const next = new Set(selectedIds.value)
@@ -146,6 +164,9 @@ function toggleSelection(session: ImportPreviewSession) {
 }
 
 function selectVisible() {
+  if (loading.value) {
+    return
+  }
   const next = new Set(selectedIds.value)
   for (const session of visibleSessions.value) {
     if (session.status === 'new') {
@@ -160,7 +181,7 @@ function clearSelection() {
 }
 
 async function importSelected() {
-  if (selectedIds.value.size === 0) {
+  if (loading.value || importing.value || selectedIds.value.size === 0) {
     return
   }
   importing.value = true
@@ -188,15 +209,16 @@ async function importSelected() {
           v-model="search"
           class="dialog-input"
           type="search"
+          aria-label="Search import sessions"
           placeholder="Search name, directory, or Codex id"
         />
-        <select v-model="workingDirFilter" class="dialog-select">
+        <select v-model="workingDirFilter" class="dialog-select" aria-label="Filter by directory">
           <option value="">All directories</option>
           <option v-for="directory in directoryOptions" :key="directory" :value="directory">
             {{ directory }}
           </option>
         </select>
-        <select v-model="timeFilter" class="dialog-select">
+        <select v-model="timeFilter" class="dialog-select" aria-label="Filter by last active time">
           <option value="7d">Recent 7 days</option>
           <option value="30d">Recent 30 days</option>
           <option value="all">All</option>
@@ -221,13 +243,16 @@ async function importSelected() {
           <span>Last active</span>
           <span>Status</span>
         </div>
-        <button
+        <div
           v-for="session in visibleSessions"
           :key="session.codex_session_id + session.codex_session_path"
           class="import-row"
-          type="button"
+          role="button"
+          tabindex="0"
           :class="{ existing: session.status === 'existing' }"
           @click="toggleSelection(session)"
+          @keydown.enter.prevent="toggleSelection(session)"
+          @keydown.space.prevent="toggleSelection(session)"
         >
           <input
             type="checkbox"
@@ -239,18 +264,20 @@ async function importSelected() {
           <span class="import-path" :title="session.working_dir">{{ session.working_dir }}</span>
           <span>{{ formatDate(session.last_active_at) }}</span>
           <span class="import-status" :class="session.status">{{ session.status }}</span>
-        </button>
+        </div>
         <div v-if="!loading && visibleSessions.length === 0" class="import-empty">No sessions</div>
         <div v-if="loading" class="import-empty">Loading sessions</div>
       </div>
 
       <footer class="dialog-actions import-actions">
-        <button class="secondary-button" type="button" @click="selectVisible">Select visible</button>
+        <button class="secondary-button" type="button" :disabled="loading" @click="selectVisible">
+          Select visible
+        </button>
         <button class="secondary-button" type="button" @click="clearSelection">Clear selection</button>
         <button
           class="primary-button"
           type="button"
-          :disabled="selectedCount === 0 || importing"
+          :disabled="selectedCount === 0 || loading || importing"
           @click="importSelected"
         >
           {{ importing ? 'Importing' : 'Import selected' }}
