@@ -116,11 +116,12 @@ button {
 
 .sidebar-action-row {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto 1fr;
   gap: 8px;
 }
 
 .sidebar-action-row .secondary-button:last-child {
+  grid-column: 1 / -1;
   min-width: 0;
 }
 

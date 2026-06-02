@@ -10,6 +10,7 @@ type ImportPreviewSession = models.main.ImportPreviewSession
 
 const props = defineProps<{
   open: boolean
+  importFinalizing: boolean
 }>()
 
 const emit = defineEmits<{
@@ -65,6 +66,8 @@ const visibleSessions = computed(() => {
 })
 
 const selectedCount = computed(() => selectedIds.value.size)
+const importBusy = computed(() => loading.value || importing.value || props.importFinalizing)
+const closeDisabled = computed(() => importing.value || props.importFinalizing)
 
 watch(
   () => props.open,
@@ -157,7 +160,7 @@ function isSelected(id: string): boolean {
 }
 
 function toggleSelection(session: ImportPreviewSession) {
-  if (loading.value || importing.value || session.status !== 'new') {
+  if (importBusy.value || session.status !== 'new') {
     return
   }
   const next = new Set(selectedIds.value)
@@ -170,7 +173,7 @@ function toggleSelection(session: ImportPreviewSession) {
 }
 
 function selectVisible() {
-  if (loading.value || importing.value) {
+  if (importBusy.value) {
     return
   }
   const next = new Set(selectedIds.value)
@@ -183,14 +186,14 @@ function selectVisible() {
 }
 
 function clearSelection() {
-  if (loading.value || importing.value) {
+  if (importBusy.value) {
     return
   }
   selectedIds.value = new Set()
 }
 
 async function importSelected() {
-  if (loading.value || importing.value || selectedIds.value.size === 0) {
+  if (importBusy.value || selectedIds.value.size === 0) {
     return
   }
   const requestId = importRequestId.value + 1
@@ -215,7 +218,7 @@ async function importSelected() {
 }
 
 function requestClose() {
-  if (importing.value) {
+  if (closeDisabled.value) {
     return
   }
   emit('close')
@@ -236,7 +239,7 @@ function requestClose() {
           class="dialog-close"
           type="button"
           title="Close"
-          :disabled="importing"
+          :disabled="closeDisabled"
           @click="requestClose"
         >
           x
@@ -291,7 +294,7 @@ function requestClose() {
           <input
             type="checkbox"
             :checked="isSelected(session.codex_session_id)"
-            :disabled="session.status !== 'new' || loading || importing"
+            :disabled="session.status !== 'new' || importBusy"
             :aria-label="`Select ${session.name}`"
             @click.stop="toggleSelection(session)"
           />
@@ -308,7 +311,7 @@ function requestClose() {
         <button
           class="secondary-button"
           type="button"
-          :disabled="loading || importing"
+          :disabled="importBusy"
           @click="selectVisible"
         >
           Select visible
@@ -316,7 +319,7 @@ function requestClose() {
         <button
           class="secondary-button"
           type="button"
-          :disabled="selectedCount === 0 || loading || importing"
+          :disabled="selectedCount === 0 || importBusy"
           @click="clearSelection"
         >
           Clear selection
@@ -324,10 +327,10 @@ function requestClose() {
         <button
           class="primary-button"
           type="button"
-          :disabled="selectedCount === 0 || loading || importing"
+          :disabled="selectedCount === 0 || importBusy"
           @click="importSelected"
         >
-          {{ importing ? 'Importing' : 'Import selected' }}
+          {{ importing || importFinalizing ? 'Importing' : 'Import selected' }}
         </button>
       </footer>
     </section>

@@ -31,6 +31,7 @@ const error = ref('')
 const search = ref('')
 const notice = ref('')
 const importDialogOpen = ref(false)
+const importFinalizing = ref(false)
 const clearingImported = ref(false)
 const newDialogOpen = ref(false)
 const defaultWorkingDir = ref('')
@@ -149,6 +150,7 @@ function openImportDialog() {
 }
 
 async function handleImported(result: models.main.ImportResult) {
+  importFinalizing.value = true
   error.value = ''
   notice.value = ''
   try {
@@ -157,6 +159,8 @@ async function handleImported(result: models.main.ImportResult) {
     importDialogOpen.value = false
   } catch (err) {
     error.value = String(err)
+  } finally {
+    importFinalizing.value = false
   }
 }
 
@@ -336,6 +340,7 @@ onUnmounted(() => {
     />
     <ImportDialog
       :open="importDialogOpen"
+      :import-finalizing="importFinalizing"
       @close="importDialogOpen = false"
       @imported="handleImported"
       @error="handleImportError"
