@@ -11,6 +11,7 @@ defineProps<{
   groups: SessionGroup[]
   selectedId: string
   search: string
+  clearingImported: boolean
 }>()
 
 const emit = defineEmits<{
@@ -50,7 +51,13 @@ function handleSearchInput(event: Event) {
       <div class="sidebar-action-row">
         <button class="primary-button" title="New session" @click="$emit('new-session')">+ New</button>
         <button class="secondary-button" @click="$emit('import-sessions')">Import</button>
-        <button class="secondary-button" @click="$emit('clear-imported')">Clear Imported</button>
+        <button
+          class="secondary-button"
+          :disabled="clearingImported"
+          @click="$emit('clear-imported')"
+        >
+          {{ clearingImported ? 'Clearing' : 'Clear Imported' }}
+        </button>
       </div>
     </div>
 

@@ -31,6 +31,7 @@ const error = ref('')
 const search = ref('')
 const notice = ref('')
 const importDialogOpen = ref(false)
+const clearingImported = ref(false)
 const newDialogOpen = ref(false)
 const defaultWorkingDir = ref('')
 const renameDialogOpen = ref(false)
@@ -148,16 +149,22 @@ function openImportDialog() {
 }
 
 async function handleImported(result: models.main.ImportResult) {
+  error.value = ''
   notice.value = `Imported ${result.imported}, skipped ${result.skipped}, failed ${result.failed}`
   importDialogOpen.value = false
   await loadSessions()
 }
 
 function handleImportError(message: string) {
+  notice.value = ''
   error.value = message
 }
 
 async function clearImportedSessions() {
+  if (clearingImported.value) {
+    return
+  }
+
   if (
     !window.confirm(
       'Remove all imported sessions from EMT? Codex history files and EMT-created sessions will not be deleted.',
@@ -168,6 +175,7 @@ async function clearImportedSessions() {
 
   error.value = ''
   notice.value = ''
+  clearingImported.value = true
   try {
     const result = await ClearImportedSessions()
     await loadSessions()
@@ -177,6 +185,8 @@ async function clearImportedSessions() {
         : `Cleared ${result.cleared} imported sessions`
   } catch (err) {
     error.value = String(err)
+  } finally {
+    clearingImported.value = false
   }
 }
 
@@ -280,6 +290,7 @@ onUnmounted(() => {
       v-model:search="search"
       :groups="groupedSessions"
       :selected-id="selectedId"
+      :clearing-imported="clearingImported"
       @import-sessions="openImportDialog"
       @clear-imported="clearImportedSessions"
       @new-session="openNewSessionDialog"
