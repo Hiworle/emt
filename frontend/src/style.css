@@ -397,6 +397,8 @@ button {
 .import-dialog {
   width: min(960px, 100%);
   max-height: calc(100vh - 48px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .dialog-header {
@@ -429,6 +431,15 @@ button {
 .dialog-close:hover {
   color: #ffffff;
   background: #252b33;
+}
+
+.dialog-close:disabled {
+  color: #5f6975;
+  cursor: default;
+}
+
+.dialog-close:disabled:hover {
+  background: transparent;
 }
 
 .field-label {
@@ -494,7 +505,8 @@ button {
 }
 
 .import-table {
-  min-height: 220px;
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: 56vh;
   overflow: auto;
   border: 1px solid #2a2f36;

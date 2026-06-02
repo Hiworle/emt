@@ -28,6 +28,7 @@ const timeFilter = ref<'7d' | '30d' | 'all'>('30d')
 const workingDirFilter = ref('')
 const showExisting = ref(false)
 const previewRequestId = ref(0)
+const importRequestId = ref(0)
 
 const directoryOptions = computed(() => {
   const values = new Set<string>()
@@ -70,12 +71,17 @@ watch(
   async (open) => {
     if (!open) {
       previewRequestId.value += 1
+      importRequestId.value += 1
       loading.value = false
+      importing.value = false
       return
     }
     resetFilters()
+    importRequestId.value += 1
+    importing.value = false
     await loadPreview()
   },
+  { immediate: true },
 )
 
 function resetFilters() {
@@ -187,24 +193,54 @@ async function importSelected() {
   if (loading.value || importing.value || selectedIds.value.size === 0) {
     return
   }
+  const requestId = importRequestId.value + 1
+  importRequestId.value = requestId
   importing.value = true
   try {
     const result = await ImportSelectedCodexSessions(Array.from(selectedIds.value))
+    if (requestId !== importRequestId.value || !props.open) {
+      return
+    }
     emit('imported', result)
   } catch (err) {
+    if (requestId !== importRequestId.value || !props.open) {
+      return
+    }
     emit('error', String(err))
   } finally {
-    importing.value = false
+    if (requestId === importRequestId.value) {
+      importing.value = false
+    }
   }
+}
+
+function requestClose() {
+  if (importing.value) {
+    return
+  }
+  emit('close')
 }
 </script>
 
 <template>
-  <div v-if="open" class="dialog-backdrop" @click.self="$emit('close')">
-    <section class="session-dialog import-dialog">
+  <div v-if="open" class="dialog-backdrop" @click.self="requestClose">
+    <section
+      class="session-dialog import-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="import-dialog-title"
+    >
       <header class="dialog-header">
-        <div class="dialog-title">Import Codex sessions</div>
-        <button class="dialog-close" type="button" title="Close" @click="$emit('close')">x</button>
+        <div id="import-dialog-title" class="dialog-title">Import Codex sessions</div>
+        <button
+          class="dialog-close"
+          type="button"
+          title="Close"
+          :disabled="importing"
+          @click="requestClose"
+        >
+          x
+        </button>
       </header>
 
       <div class="import-filters">
@@ -256,6 +292,7 @@ async function importSelected() {
             type="checkbox"
             :checked="isSelected(session.codex_session_id)"
             :disabled="session.status !== 'new' || loading || importing"
+            :aria-label="`Select ${session.name}`"
             @click.stop="toggleSelection(session)"
           />
           <span class="import-name" :title="session.name">{{ session.name }}</span>
