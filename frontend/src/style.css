@@ -388,6 +388,11 @@ button {
   width: min(400px, 100%);
 }
 
+.import-dialog {
+  width: min(960px, 100%);
+  max-height: calc(100vh - 48px);
+}
+
 .dialog-header {
   display: flex;
   align-items: center;
@@ -447,6 +452,117 @@ button {
   border-color: #4a6f7c;
 }
 
+.import-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px) 150px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.dialog-select {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #343c46;
+  border-radius: 6px;
+  padding: 0 8px;
+  color: #e7edf3;
+  background: #111418;
+  font: inherit;
+  font-size: 13px;
+}
+
+.dialog-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #aeb8c4;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.import-summary {
+  display: flex;
+  gap: 12px;
+  color: #8b97a5;
+  font-size: 12px;
+}
+
+.import-table {
+  min-height: 220px;
+  max-height: 56vh;
+  overflow: auto;
+  border: 1px solid #2a2f36;
+  border-radius: 6px;
+}
+
+.import-row {
+  display: grid;
+  grid-template-columns: 28px minmax(160px, 1.1fr) minmax(180px, 1.3fr) 150px 82px;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-bottom: 1px solid #242a31;
+  padding: 0 8px;
+  color: #cbd5df;
+  background: #111418;
+  font-size: 12px;
+  text-align: left;
+}
+
+.import-row:not(.import-row-header):hover {
+  background: #20252c;
+}
+
+.import-row-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #8b97a5;
+  background: #171a1f;
+  font-weight: 700;
+}
+
+.import-row.existing {
+  color: #7e8996;
+}
+
+.import-name,
+.import-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-path {
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.import-status {
+  width: fit-content;
+  border: 1px solid #3a434d;
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: #aeb8c4;
+  background: #15191f;
+}
+
+.import-status.new {
+  border-color: #3f6a5d;
+  color: #b8ead9;
+}
+
+.import-empty {
+  padding: 22px;
+  color: #7f8994;
+  font-size: 13px;
+  text-align: center;
+}
+
+.import-actions {
+  align-items: center;
+}
+
 .directory-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -458,6 +574,16 @@ button {
   justify-content: flex-end;
   gap: 8px;
   padding-top: 2px;
+}
+
+@media (max-width: 860px) {
+  .import-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .import-row {
+    grid-template-columns: 28px minmax(140px, 1fr) minmax(140px, 1fr) 120px 74px;
+  }
 }
 
 @media (max-width: 720px) {
