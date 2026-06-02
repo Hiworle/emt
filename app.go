@@ -199,6 +199,50 @@ func (a *App) ImportCodexSessions() (ImportResult, error) {
 	return a.sessions.ImportCodexSessions(root)
 }
 
+func (a *App) PreviewCodexSessions() (ImportPreviewResult, error) {
+	root := defaultCodexSessionRoot()
+	if root == "" {
+		return ImportPreviewResult{}, nil
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.sessions.PreviewCodexSessions(root)
+}
+
+func (a *App) ImportSelectedCodexSessions(codexSessionIDs []string) (ImportResult, error) {
+	root := defaultCodexSessionRoot()
+	if root == "" {
+		return ImportResult{}, nil
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.sessions.ImportSelectedCodexSessions(root, codexSessionIDs)
+}
+
+func (a *App) ClearImportedSessions() (ClearImportedResult, error) {
+	a.mu.Lock()
+	importedIDs := make([]string, 0)
+	for _, session := range a.sessions.sessions {
+		if session.Source == SessionSourceImported {
+			importedIDs = append(importedIDs, session.ID)
+		}
+	}
+	ptyManager := a.pty
+	a.mu.Unlock()
+
+	if ptyManager != nil {
+		for _, id := range importedIDs {
+			_ = ptyManager.Close(id)
+		}
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.sessions.ClearImportedSessions()
+}
+
 func (a *App) RenameSession(id string, name string) (Session, error) {
 	a.mu.Lock()
 	session, err := a.sessions.RenameSession(id, name)

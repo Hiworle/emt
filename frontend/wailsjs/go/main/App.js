@@ -6,6 +6,10 @@ export function ChooseWorkingDir(arg1) {
   return window['go']['main']['App']['ChooseWorkingDir'](arg1);
 }
 
+export function ClearImportedSessions() {
+  return window['go']['main']['App']['ClearImportedSessions']();
+}
+
 export function CloseSession(arg1) {
   return window['go']['main']['App']['CloseSession'](arg1);
 }
@@ -22,8 +26,16 @@ export function ImportCodexSessions() {
   return window['go']['main']['App']['ImportCodexSessions']();
 }
 
+export function ImportSelectedCodexSessions(arg1) {
+  return window['go']['main']['App']['ImportSelectedCodexSessions'](arg1);
+}
+
 export function ListSessions() {
   return window['go']['main']['App']['ListSessions']();
+}
+
+export function PreviewCodexSessions() {
+  return window['go']['main']['App']['PreviewCodexSessions']();
 }
 
 export function RenameSession(arg1, arg2) {

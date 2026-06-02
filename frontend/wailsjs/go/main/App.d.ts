@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function ChooseWorkingDir(arg1:string):Promise<string>;
 
+export function ClearImportedSessions():Promise<main.ClearImportedResult>;
+
 export function CloseSession(arg1:string):Promise<void>;
 
 export function CreateSession(arg1:string,arg2:string):Promise<main.Session>;
@@ -12,7 +14,11 @@ export function DeleteSession(arg1:string):Promise<main.Session>;
 
 export function ImportCodexSessions():Promise<main.ImportResult>;
 
+export function ImportSelectedCodexSessions(arg1:Array<string>):Promise<main.ImportResult>;
+
 export function ListSessions():Promise<Array<main.Session>>;
+
+export function PreviewCodexSessions():Promise<main.ImportPreviewResult>;
 
 export function RenameSession(arg1:string,arg2:string):Promise<main.Session>;
 

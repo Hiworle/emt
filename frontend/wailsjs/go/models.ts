@@ -1,5 +1,94 @@
 export namespace main {
 	
+	export class ClearImportedResult {
+	    cleared: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClearImportedResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cleared = source["cleared"];
+	    }
+	}
+	export class ImportPreviewSession {
+	    codex_session_id: string;
+	    codex_session_path: string;
+	    name: string;
+	    working_dir: string;
+	    // Go type: time
+	    created_at: any;
+	    // Go type: time
+	    last_active_at: any;
+	    status: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportPreviewSession(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.codex_session_id = source["codex_session_id"];
+	        this.codex_session_path = source["codex_session_path"];
+	        this.name = source["name"];
+	        this.working_dir = source["working_dir"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.last_active_at = this.convertValues(source["last_active_at"], null);
+	        this.status = source["status"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ImportPreviewResult {
+	    sessions: ImportPreviewSession[];
+	    failed: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportPreviewResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessions = this.convertValues(source["sessions"], ImportPreviewSession);
+	        this.failed = source["failed"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ImportResult {
 	    imported: number;
 	    skipped: number;
