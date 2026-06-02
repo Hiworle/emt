@@ -106,10 +106,11 @@ async function loadPreview() {
     if (requestId !== previewRequestId.value) {
       return
     }
-    sessions.value = result.sessions.map((session) =>
+    const previewSessions = result?.sessions || []
+    sessions.value = previewSessions.map((session) =>
       models.main.ImportPreviewSession.createFrom(session),
     )
-    failed.value = result.failed || 0
+    failed.value = result?.failed || 0
   } catch (err) {
     if (requestId !== previewRequestId.value) {
       return

@@ -67,6 +67,38 @@ func TestResolveWorkingDirRejectsMissingDir(t *testing.T) {
 	}
 }
 
+func TestAppListSessionsReturnsNonNilEmptySlice(t *testing.T) {
+	app := &App{sessions: NewSessionManager(filepath.Join(t.TempDir(), "sessions.json"), "/tmp/work")}
+
+	sessions, err := app.ListSessions()
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if sessions == nil {
+		t.Fatal("expected non-nil empty sessions")
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("expected empty sessions, got %d", len(sessions))
+	}
+}
+
+func TestAppPreviewCodexSessionsReturnsNonNilEmptySessions(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	app := &App{sessions: NewSessionManager(filepath.Join(t.TempDir(), "sessions.json"), "/tmp/work")}
+
+	result, err := app.PreviewCodexSessions()
+	if err != nil {
+		t.Fatalf("preview sessions: %v", err)
+	}
+	if result.Sessions == nil {
+		t.Fatal("expected non-nil empty preview sessions")
+	}
+	if len(result.Sessions) != 0 {
+		t.Fatalf("expected empty preview sessions, got %d", len(result.Sessions))
+	}
+}
+
 func TestAppClearImportedSessionsRemovesImportedSessions(t *testing.T) {
 	storePath := filepath.Join(t.TempDir(), "sessions.json")
 	manager := NewSessionManager(storePath, "/tmp/work")

@@ -39,6 +39,25 @@ func TestSessionStoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLoadSessionsMissingStoreReturnsNonNilEmptySlice(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	manager := NewSessionManager(path, "/tmp/work")
+
+	sessions, err := manager.LoadSessions()
+	if err != nil {
+		t.Fatalf("load missing store: %v", err)
+	}
+	if sessions == nil {
+		t.Fatal("expected non-nil empty sessions")
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("expected empty sessions, got %d", len(sessions))
+	}
+	if manager.sessions == nil {
+		t.Fatal("expected manager sessions to be non-nil empty slice")
+	}
+}
+
 func TestLoadSessionsNormalizesPhase1Records(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.json")
 	data := []byte(`{
@@ -81,8 +100,14 @@ func TestSessionStoreBacksUpCorruptJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load corrupt store: %v", err)
 	}
+	if sessions == nil {
+		t.Fatal("expected non-nil empty sessions")
+	}
 	if len(sessions) != 0 {
 		t.Fatalf("expected empty sessions, got %d", len(sessions))
+	}
+	if manager.sessions == nil {
+		t.Fatal("expected manager sessions to be non-nil empty slice")
 	}
 
 	matches, err := filepath.Glob(path + ".bak.*")
@@ -367,6 +392,24 @@ func TestPreviewCodexSessionsDoesNotMutateStore(t *testing.T) {
 	}
 	if string(before) != string(after) {
 		t.Fatalf("preview mutated store\nbefore=%s\nafter=%s", before, after)
+	}
+}
+
+func TestPreviewCodexSessionsEmptyReturnsNonNilSessions(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	manager := NewSessionManager(storePath, "/tmp/work")
+	_, _ = manager.LoadSessions()
+
+	result, err := manager.PreviewCodexSessions(root)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if result.Sessions == nil {
+		t.Fatal("expected non-nil empty preview sessions")
+	}
+	if len(result.Sessions) != 0 {
+		t.Fatalf("expected empty preview sessions, got %d", len(result.Sessions))
 	}
 }
 

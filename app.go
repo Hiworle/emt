@@ -64,7 +64,7 @@ func (a *App) shutdown(ctx context.Context) {
 func (a *App) ListSessions() ([]Session, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return append([]Session(nil), a.sessions.sessions...), nil
+	return append([]Session{}, a.sessions.sessions...), nil
 }
 
 func (a *App) CreateSession(name string, workingDir string) (Session, error) {
@@ -202,7 +202,7 @@ func (a *App) ImportCodexSessions() (ImportResult, error) {
 func (a *App) PreviewCodexSessions() (ImportPreviewResult, error) {
 	root := defaultCodexSessionRoot()
 	if root == "" {
-		return ImportPreviewResult{}, nil
+		return ImportPreviewResult{Sessions: []ImportPreviewSession{}}, nil
 	}
 
 	a.mu.Lock()

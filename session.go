@@ -82,8 +82,8 @@ func NewSessionManager(path string, workingDir string) *SessionManager {
 func (m *SessionManager) LoadSessions() ([]Session, error) {
 	data, err := os.ReadFile(m.path)
 	if errors.Is(err, os.ErrNotExist) {
-		m.sessions = nil
-		return nil, nil
+		m.sessions = []Session{}
+		return []Session{}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -93,16 +93,16 @@ func (m *SessionManager) LoadSessions() ([]Session, error) {
 	if err := json.Unmarshal(data, &file); err != nil {
 		backup := fmt.Sprintf("%s.bak.%d", m.path, time.Now().Unix())
 		_ = os.Rename(m.path, backup)
-		m.sessions = nil
-		return nil, nil
+		m.sessions = []Session{}
+		return []Session{}, nil
 	}
 
 	for i := range file.Sessions {
 		normalizeSession(&file.Sessions[i])
 	}
 
-	m.sessions = file.Sessions
-	return append([]Session(nil), m.sessions...), nil
+	m.sessions = append([]Session{}, file.Sessions...)
+	return append([]Session{}, m.sessions...), nil
 }
 
 func (m *SessionManager) SaveSessions(sessions []Session) error {
@@ -118,7 +118,7 @@ func (m *SessionManager) SaveSessions(sessions []Session) error {
 		return err
 	}
 
-	m.sessions = append([]Session(nil), sessions...)
+	m.sessions = append([]Session{}, sessions...)
 	return nil
 }
 
@@ -396,7 +396,7 @@ func (m *SessionManager) PreviewCodexSessions(root string) (ImportPreviewResult,
 		}
 	}
 
-	result := ImportPreviewResult{Failed: failed}
+	result := ImportPreviewResult{Sessions: []ImportPreviewSession{}, Failed: failed}
 	for _, meta := range latestCodexSessionMetaByID(metas) {
 		status := ImportPreviewStatusNew
 		if existingCodexIDs[meta.ID] {

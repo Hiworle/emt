@@ -102,7 +102,8 @@ function upsertSession(source: Session) {
 }
 
 async function loadSessions() {
-  sessions.value = (await ListSessions()).map(toSession)
+  const listedSessions = (await ListSessions()) || []
+  sessions.value = listedSessions.map(toSession)
   if (selectedId.value && !sessions.value.some((session) => session.id === selectedId.value)) {
     selectedId.value = ''
   }

@@ -1,12 +1,12 @@
 export namespace main {
-	
+
 	export class ClearImportedResult {
 	    cleared: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ClearImportedResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.cleared = source["cleared"];
@@ -22,11 +22,11 @@ export namespace main {
 	    // Go type: time
 	    last_active_at: any;
 	    status: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ImportPreviewSession(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.codex_session_id = source["codex_session_id"];
@@ -37,7 +37,7 @@ export namespace main {
 	        this.last_active_at = this.convertValues(source["last_active_at"], null);
 	        this.status = source["status"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -59,17 +59,17 @@ export namespace main {
 	export class ImportPreviewResult {
 	    sessions: ImportPreviewSession[];
 	    failed: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ImportPreviewResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sessions = this.convertValues(source["sessions"], ImportPreviewSession);
 	        this.failed = source["failed"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -88,16 +88,16 @@ export namespace main {
 		    return a;
 		}
 	}
-	
+
 	export class ImportResult {
 	    imported: number;
 	    skipped: number;
 	    failed: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ImportResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.imported = source["imported"];
@@ -117,11 +117,11 @@ export namespace main {
 	    // Go type: time
 	    last_active_at: any;
 	    status: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Session(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -134,7 +134,7 @@ export namespace main {
 	        this.last_active_at = this.convertValues(source["last_active_at"], null);
 	        this.status = source["status"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
