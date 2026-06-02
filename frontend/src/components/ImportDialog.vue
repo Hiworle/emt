@@ -151,7 +151,7 @@ function isSelected(id: string): boolean {
 }
 
 function toggleSelection(session: ImportPreviewSession) {
-  if (loading.value || session.status !== 'new') {
+  if (loading.value || importing.value || session.status !== 'new') {
     return
   }
   const next = new Set(selectedIds.value)
@@ -164,7 +164,7 @@ function toggleSelection(session: ImportPreviewSession) {
 }
 
 function selectVisible() {
-  if (loading.value) {
+  if (loading.value || importing.value) {
     return
   }
   const next = new Set(selectedIds.value)
@@ -177,6 +177,9 @@ function selectVisible() {
 }
 
 function clearSelection() {
+  if (loading.value || importing.value) {
+    return
+  }
   selectedIds.value = new Set()
 }
 
@@ -247,17 +250,12 @@ async function importSelected() {
           v-for="session in visibleSessions"
           :key="session.codex_session_id + session.codex_session_path"
           class="import-row"
-          role="button"
-          tabindex="0"
           :class="{ existing: session.status === 'existing' }"
-          @click="toggleSelection(session)"
-          @keydown.enter.prevent="toggleSelection(session)"
-          @keydown.space.prevent="toggleSelection(session)"
         >
           <input
             type="checkbox"
             :checked="isSelected(session.codex_session_id)"
-            :disabled="session.status !== 'new'"
+            :disabled="session.status !== 'new' || loading || importing"
             @click.stop="toggleSelection(session)"
           />
           <span class="import-name" :title="session.name">{{ session.name }}</span>
@@ -270,10 +268,22 @@ async function importSelected() {
       </div>
 
       <footer class="dialog-actions import-actions">
-        <button class="secondary-button" type="button" :disabled="loading" @click="selectVisible">
+        <button
+          class="secondary-button"
+          type="button"
+          :disabled="loading || importing"
+          @click="selectVisible"
+        >
           Select visible
         </button>
-        <button class="secondary-button" type="button" @click="clearSelection">Clear selection</button>
+        <button
+          class="secondary-button"
+          type="button"
+          :disabled="selectedCount === 0 || loading || importing"
+          @click="clearSelection"
+        >
+          Clear selection
+        </button>
         <button
           class="primary-button"
           type="button"
