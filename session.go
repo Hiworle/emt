@@ -237,6 +237,79 @@ func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) 
 	return result, nil
 }
 
+func (m *SessionManager) ImportSelectedCodexSessions(root string, codexSessionIDs []string) (ImportResult, error) {
+	var result ImportResult
+
+	requested := make(map[string]bool, len(codexSessionIDs))
+	for _, id := range codexSessionIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			requested[id] = true
+		}
+	}
+	if len(requested) == 0 {
+		return result, nil
+	}
+
+	metas, failed, err := scanCodexSessionCandidates(root)
+	if err != nil {
+		return result, err
+	}
+	result.Failed += failed
+
+	existingCodexIDs := make(map[string]bool, len(m.sessions))
+	existingSessionIDs := make(map[string]bool, len(m.sessions))
+	for _, session := range m.sessions {
+		if session.CodexSessionID != "" {
+			existingCodexIDs[session.CodexSessionID] = true
+		}
+		existingSessionIDs[session.ID] = true
+	}
+
+	found := make(map[string]bool, len(requested))
+	sessions := append([]Session(nil), m.sessions...)
+	for _, meta := range metas {
+		if !requested[meta.ID] {
+			continue
+		}
+		found[meta.ID] = true
+		if existingCodexIDs[meta.ID] {
+			result.Skipped++
+			continue
+		}
+
+		session := Session{
+			ID:               importedSessionID(meta.ID, existingSessionIDs),
+			Name:             importedSessionName(meta),
+			CodexSessionID:   meta.ID,
+			CodexSessionPath: meta.Path,
+			WorkingDir:       meta.CWD,
+			Source:           SessionSourceImported,
+			CreatedAt:        meta.Timestamp,
+			LastActiveAt:     meta.ModTime,
+			Status:           SessionStatusIdle,
+		}
+		sessions = append(sessions, session)
+		existingCodexIDs[meta.ID] = true
+		existingSessionIDs[session.ID] = true
+		result.Imported++
+	}
+
+	for id := range requested {
+		if !found[id] {
+			result.Failed++
+		}
+	}
+
+	if result.Imported == 0 {
+		return result, nil
+	}
+	if err := m.SaveSessions(sessions); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
 func scanCodexSessionCandidates(root string) ([]CodexSessionMeta, int, error) {
 	var metas []CodexSessionMeta
 	var failed int

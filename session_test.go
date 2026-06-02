@@ -235,6 +235,71 @@ func TestImportCodexSessionsCountsFailures(t *testing.T) {
 	}
 }
 
+func TestImportSelectedCodexSessionsImportsOnlyRequestedIDs(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	writeCodexMeta(t, root, "a.jsonl", "019d-a", "/tmp/project-a", "2026-05-29T01:00:00Z")
+	writeCodexMeta(t, root, "b.jsonl", "019d-b", "/tmp/project-b", "2026-05-29T02:00:00Z")
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	_, _ = manager.LoadSessions()
+	result, err := manager.ImportSelectedCodexSessions(root, []string{"019d-b"})
+	if err != nil {
+		t.Fatalf("import selected: %v", err)
+	}
+	if result.Imported != 1 || result.Skipped != 0 || result.Failed != 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if len(manager.sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(manager.sessions))
+	}
+	if manager.sessions[0].CodexSessionID != "019d-b" {
+		t.Fatalf("imported wrong session: %+v", manager.sessions[0])
+	}
+}
+
+func TestImportSelectedCodexSessionsEmptyInputIsNoop(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	writeCodexMeta(t, root, "a.jsonl", "019d-a", "/tmp/project-a", "2026-05-29T01:00:00Z")
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	_, _ = manager.LoadSessions()
+	result, err := manager.ImportSelectedCodexSessions(root, nil)
+	if err != nil {
+		t.Fatalf("import selected: %v", err)
+	}
+	if result.Imported != 0 || result.Skipped != 0 || result.Failed != 0 || len(manager.sessions) != 0 {
+		t.Fatalf("unexpected noop result: %+v len=%d", result, len(manager.sessions))
+	}
+}
+
+func TestImportSelectedCodexSessionsSkipsExistingAndCountsMissing(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	writeCodexMeta(t, root, "a.jsonl", "019d-a", "/tmp/project-a", "2026-05-29T01:00:00Z")
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	now := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	if err := manager.SaveSessions([]Session{{
+		ID: "imported-a", Name: "A", CodexSessionID: "019d-a", WorkingDir: "/tmp/project-a",
+		Source: SessionSourceImported, CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle,
+	}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	result, err := manager.ImportSelectedCodexSessions(root, []string{"019d-a", "019d-missing"})
+	if err != nil {
+		t.Fatalf("import selected: %v", err)
+	}
+	if result.Imported != 0 || result.Skipped != 1 || result.Failed != 1 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if len(manager.sessions) != 1 {
+		t.Fatalf("expected no duplicate session, got %d", len(manager.sessions))
+	}
+}
+
 func TestPreviewCodexSessionsDoesNotMutateStore(t *testing.T) {
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "sessions.json")
