@@ -235,6 +235,100 @@ func TestImportCodexSessionsCountsFailures(t *testing.T) {
 	}
 }
 
+func TestPreviewCodexSessionsDoesNotMutateStore(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "sessions.json")
+	root := t.TempDir()
+	writeCodexMeta(t, root, "a.jsonl", "019d-a", "/tmp/project-a", "2026-05-29T01:00:00Z")
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	now := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	if err := manager.SaveSessions([]Session{{
+		ID: "emt-1", Name: "EMT", WorkingDir: "/tmp/work", Source: SessionSourceEMT,
+		CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle,
+	}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	before, err := os.ReadFile(storePath)
+	if err != nil {
+		t.Fatalf("read before: %v", err)
+	}
+
+	result, err := manager.PreviewCodexSessions(root)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if len(result.Sessions) != 1 {
+		t.Fatalf("expected 1 preview session, got %d", len(result.Sessions))
+	}
+
+	after, err := os.ReadFile(storePath)
+	if err != nil {
+		t.Fatalf("read after: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Fatalf("preview mutated store\nbefore=%s\nafter=%s", before, after)
+	}
+}
+
+func TestPreviewCodexSessionsMarksExistingAndSortsByLastActive(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	oldPath := writeCodexMeta(t, root, "old.jsonl", "019d-old", "/tmp/old", "2026-05-27T01:00:00Z")
+	newPath := writeCodexMeta(t, root, "new.jsonl", "019d-new", "/tmp/new", "2026-05-29T01:00:00Z")
+	oldTime := time.Date(2026, 5, 27, 1, 0, 0, 0, time.UTC)
+	newTime := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(oldPath, oldTime, oldTime); err != nil {
+		t.Fatalf("chtimes old: %v", err)
+	}
+	if err := os.Chtimes(newPath, newTime, newTime); err != nil {
+		t.Fatalf("chtimes new: %v", err)
+	}
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	if err := manager.SaveSessions([]Session{{
+		ID: "imported-old", Name: "Old", CodexSessionID: "019d-old", WorkingDir: "/tmp/old",
+		Source: SessionSourceImported, CreatedAt: oldTime, LastActiveAt: oldTime, Status: SessionStatusIdle,
+	}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	result, err := manager.PreviewCodexSessions(root)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if len(result.Sessions) != 2 {
+		t.Fatalf("expected 2 preview sessions, got %d", len(result.Sessions))
+	}
+	if result.Sessions[0].CodexSessionID != "019d-new" {
+		t.Fatalf("expected newest first, got %+v", result.Sessions)
+	}
+	if result.Sessions[0].Status != ImportPreviewStatusNew {
+		t.Fatalf("expected new status, got %q", result.Sessions[0].Status)
+	}
+	if result.Sessions[1].Status != ImportPreviewStatusExisting {
+		t.Fatalf("expected existing status, got %q", result.Sessions[1].Status)
+	}
+}
+
+func TestPreviewCodexSessionsCountsFailures(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "bad.jsonl"), []byte("{bad"), 0o600); err != nil {
+		t.Fatalf("write bad jsonl: %v", err)
+	}
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	_, _ = manager.LoadSessions()
+	result, err := manager.PreviewCodexSessions(root)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if result.Failed != 1 {
+		t.Fatalf("expected 1 failed, got %+v", result)
+	}
+}
+
 func TestRenameSessionRejectsEmptyName(t *testing.T) {
 	manager := NewSessionManager(filepath.Join(t.TempDir(), "sessions.json"), "/tmp/work")
 	now := time.Now().UTC()
