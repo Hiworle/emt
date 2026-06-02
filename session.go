@@ -288,8 +288,16 @@ func (m *SessionManager) PreviewCodexSessions(root string) (ImportPreviewResult,
 		}
 	}
 
-	result := ImportPreviewResult{Failed: failed}
+	latestByCodexID := make(map[string]CodexSessionMeta, len(metas))
 	for _, meta := range metas {
+		existing, ok := latestByCodexID[meta.ID]
+		if !ok || meta.ModTime.After(existing.ModTime) || (meta.ModTime.Equal(existing.ModTime) && meta.Path < existing.Path) {
+			latestByCodexID[meta.ID] = meta
+		}
+	}
+
+	result := ImportPreviewResult{Failed: failed}
+	for _, meta := range latestByCodexID {
 		status := ImportPreviewStatusNew
 		if existingCodexIDs[meta.ID] {
 			status = ImportPreviewStatusExisting
@@ -306,6 +314,12 @@ func (m *SessionManager) PreviewCodexSessions(root string) (ImportPreviewResult,
 	}
 
 	sort.Slice(result.Sessions, func(i, j int) bool {
+		if result.Sessions[i].LastActiveAt.Equal(result.Sessions[j].LastActiveAt) {
+			if result.Sessions[i].CodexSessionPath == result.Sessions[j].CodexSessionPath {
+				return result.Sessions[i].CodexSessionID < result.Sessions[j].CodexSessionID
+			}
+			return result.Sessions[i].CodexSessionPath < result.Sessions[j].CodexSessionPath
+		}
 		return result.Sessions[i].LastActiveAt.After(result.Sessions[j].LastActiveAt)
 	})
 	return result, nil
