@@ -150,9 +150,14 @@ function openImportDialog() {
 
 async function handleImported(result: models.main.ImportResult) {
   error.value = ''
-  notice.value = `Imported ${result.imported}, skipped ${result.skipped}, failed ${result.failed}`
-  importDialogOpen.value = false
-  await loadSessions()
+  notice.value = ''
+  try {
+    await loadSessions()
+    notice.value = `Imported ${result.imported}, skipped ${result.skipped}, failed ${result.failed}`
+    importDialogOpen.value = false
+  } catch (err) {
+    error.value = String(err)
+  }
 }
 
 function handleImportError(message: string) {
