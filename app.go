@@ -230,17 +230,19 @@ func (a *App) ClearImportedSessions() (ClearImportedResult, error) {
 		}
 	}
 	ptyManager := a.pty
-	a.mu.Unlock()
+	result, err := a.sessions.ClearImportedSessions()
+	if err != nil {
+		a.mu.Unlock()
+		return result, err
+	}
 
 	if ptyManager != nil {
 		for _, id := range importedIDs {
 			_ = ptyManager.Close(id)
 		}
 	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.sessions.ClearImportedSessions()
+	a.mu.Unlock()
+	return result, nil
 }
 
 func (a *App) RenameSession(id string, name string) (Session, error) {

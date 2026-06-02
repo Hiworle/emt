@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -87,5 +88,31 @@ func TestAppClearImportedSessionsRemovesImportedSessions(t *testing.T) {
 	}
 	if len(manager.sessions) != 1 || manager.sessions[0].ID != "emt-1" {
 		t.Fatalf("unexpected sessions: %+v", manager.sessions)
+	}
+}
+
+func TestAppClearImportedSessionsKeepsPTYWhenSaveFails(t *testing.T) {
+	storePath := t.TempDir()
+	manager := NewSessionManager(storePath, "/tmp/work")
+	now := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	manager.sessions = []Session{
+		{ID: "imported-1", Name: "Imported", Source: SessionSourceImported, CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle},
+	}
+
+	tempFile, err := os.CreateTemp(t.TempDir(), "pty")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	defer tempFile.Close()
+
+	ptyManager := NewPTYManager(nil, nil)
+	ptyManager.terms["imported-1"] = &ptySession{file: tempFile}
+	app := &App{sessions: manager, pty: ptyManager}
+
+	if _, err := app.ClearImportedSessions(); err == nil {
+		t.Fatalf("expected clear imported error")
+	}
+	if _, ok := ptyManager.terms["imported-1"]; !ok {
+		t.Fatalf("expected imported PTY to remain after save failure")
 	}
 }
