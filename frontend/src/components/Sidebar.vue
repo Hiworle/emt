@@ -11,12 +11,12 @@ defineProps<{
   groups: SessionGroup[]
   selectedId: string
   search: string
-  importing: boolean
 }>()
 
 const emit = defineEmits<{
   (event: 'new-session'): void
   (event: 'import-sessions'): void
+  (event: 'clear-imported'): void
   (event: 'select-session', id: string): void
   (event: 'close-session', id: string): void
   (event: 'rename-session', id: string): void
@@ -37,7 +37,6 @@ function handleSearchInput(event: Event) {
   <aside class="sidebar">
     <header class="sidebar-header">
       <div class="brand">EMT</div>
-      <button class="primary-button" title="New session" @click="$emit('new-session')">+ New</button>
     </header>
 
     <div class="sidebar-tools">
@@ -48,9 +47,11 @@ function handleSearchInput(event: Event) {
         :value="search"
         @input="handleSearchInput"
       />
-      <button class="secondary-button" :disabled="importing" @click="$emit('import-sessions')">
-        {{ importing ? 'Importing' : 'Import' }}
-      </button>
+      <div class="sidebar-action-row">
+        <button class="primary-button" title="New session" @click="$emit('new-session')">+ New</button>
+        <button class="secondary-button" @click="$emit('import-sessions')">Import</button>
+        <button class="secondary-button" @click="$emit('clear-imported')">Clear Imported</button>
+      </div>
     </div>
 
     <nav class="session-list">

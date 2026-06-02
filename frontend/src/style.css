@@ -52,7 +52,7 @@ button {
 .sidebar-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   height: 56px;
   padding: 0 14px 0 16px;
   border-bottom: 1px solid #2a2f36;
@@ -108,9 +108,20 @@ button {
 
 .sidebar-tools {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  padding: 10px 10px 8px;
+  padding: 10px;
   border-bottom: 1px solid #242a31;
+}
+
+.sidebar-action-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.sidebar-action-row .secondary-button:last-child {
+  min-width: 0;
 }
 
 .search-input {
