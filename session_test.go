@@ -300,6 +300,40 @@ func TestImportSelectedCodexSessionsSkipsExistingAndCountsMissing(t *testing.T) 
 	}
 }
 
+func TestImportSelectedCodexSessionsDedupesScanByNewestLastActive(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	root := t.TempDir()
+	oldPath := writeCodexMeta(t, root, "duplicate-old.jsonl", "019d-duplicate", "/tmp/old", "2026-05-27T01:00:00Z")
+	newPath := writeCodexMeta(t, root, "duplicate-new.jsonl", "019d-duplicate", "/tmp/new", "2026-05-29T01:00:00Z")
+	oldTime := time.Date(2026, 5, 27, 1, 0, 0, 0, time.UTC)
+	newTime := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(oldPath, oldTime, oldTime); err != nil {
+		t.Fatalf("chtimes old: %v", err)
+	}
+	if err := os.Chtimes(newPath, newTime, newTime); err != nil {
+		t.Fatalf("chtimes new: %v", err)
+	}
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	_, _ = manager.LoadSessions()
+	result, err := manager.ImportSelectedCodexSessions(root, []string{"019d-duplicate"})
+	if err != nil {
+		t.Fatalf("import selected: %v", err)
+	}
+	if result.Imported != 1 || result.Skipped != 0 || result.Failed != 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if len(manager.sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(manager.sessions))
+	}
+	if manager.sessions[0].CodexSessionPath != newPath {
+		t.Fatalf("expected newest duplicate path %q, got %q", newPath, manager.sessions[0].CodexSessionPath)
+	}
+	if !manager.sessions[0].LastActiveAt.Equal(newTime) {
+		t.Fatalf("expected newest duplicate mod time %v, got %v", newTime, manager.sessions[0].LastActiveAt)
+	}
+}
+
 func TestPreviewCodexSessionsDoesNotMutateStore(t *testing.T) {
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "sessions.json")

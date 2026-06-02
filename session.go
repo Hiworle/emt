@@ -268,7 +268,7 @@ func (m *SessionManager) ImportSelectedCodexSessions(root string, codexSessionID
 
 	found := make(map[string]bool, len(requested))
 	sessions := append([]Session(nil), m.sessions...)
-	for _, meta := range metas {
+	for _, meta := range latestCodexSessionMetaByID(metas) {
 		if !requested[meta.ID] {
 			continue
 		}
@@ -348,6 +348,17 @@ func scanCodexSessionCandidates(root string) ([]CodexSessionMeta, int, error) {
 	return metas, failed, nil
 }
 
+func latestCodexSessionMetaByID(metas []CodexSessionMeta) map[string]CodexSessionMeta {
+	latestByCodexID := make(map[string]CodexSessionMeta, len(metas))
+	for _, meta := range metas {
+		existing, ok := latestByCodexID[meta.ID]
+		if !ok || meta.ModTime.After(existing.ModTime) || (meta.ModTime.Equal(existing.ModTime) && meta.Path < existing.Path) {
+			latestByCodexID[meta.ID] = meta
+		}
+	}
+	return latestByCodexID
+}
+
 func (m *SessionManager) PreviewCodexSessions(root string) (ImportPreviewResult, error) {
 	metas, failed, err := scanCodexSessionCandidates(root)
 	if err != nil {
@@ -361,16 +372,8 @@ func (m *SessionManager) PreviewCodexSessions(root string) (ImportPreviewResult,
 		}
 	}
 
-	latestByCodexID := make(map[string]CodexSessionMeta, len(metas))
-	for _, meta := range metas {
-		existing, ok := latestByCodexID[meta.ID]
-		if !ok || meta.ModTime.After(existing.ModTime) || (meta.ModTime.Equal(existing.ModTime) && meta.Path < existing.Path) {
-			latestByCodexID[meta.ID] = meta
-		}
-	}
-
 	result := ImportPreviewResult{Failed: failed}
-	for _, meta := range latestByCodexID {
+	for _, meta := range latestCodexSessionMetaByID(metas) {
 		status := ImportPreviewStatusNew
 		if existingCodexIDs[meta.ID] {
 			status = ImportPreviewStatusExisting
