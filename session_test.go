@@ -465,6 +465,74 @@ func TestPreviewCodexSessionsCountsFailures(t *testing.T) {
 	}
 }
 
+func TestClearImportedSessionsRemovesOnlyImported(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	manager := NewSessionManager(storePath, "/tmp/work")
+	now := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	if err := manager.SaveSessions([]Session{
+		{ID: "emt-1", Name: "EMT", Source: SessionSourceEMT, CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle},
+		{ID: "imported-1", Name: "Imported", Source: SessionSourceImported, CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle},
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	result, err := manager.ClearImportedSessions()
+	if err != nil {
+		t.Fatalf("clear imported: %v", err)
+	}
+	if result.Cleared != 1 {
+		t.Fatalf("expected 1 cleared, got %+v", result)
+	}
+	if len(manager.sessions) != 1 || manager.sessions[0].ID != "emt-1" {
+		t.Fatalf("unexpected sessions: %+v", manager.sessions)
+	}
+}
+
+func TestClearImportedSessionsLeavesCodexJSONL(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "sessions.json")
+	jsonlPath := filepath.Join(dir, "rollout.jsonl")
+	if err := os.WriteFile(jsonlPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("write jsonl: %v", err)
+	}
+
+	manager := NewSessionManager(storePath, "/tmp/work")
+	now := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	if err := manager.SaveSessions([]Session{{
+		ID: "imported-1", Name: "Imported", CodexSessionPath: jsonlPath,
+		Source: SessionSourceImported, CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle,
+	}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if _, err := manager.ClearImportedSessions(); err != nil {
+		t.Fatalf("clear imported: %v", err)
+	}
+	if _, err := os.Stat(jsonlPath); err != nil {
+		t.Fatalf("expected jsonl to remain: %v", err)
+	}
+}
+
+func TestClearImportedSessionsNoopWhenNone(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "sessions.json")
+	manager := NewSessionManager(storePath, "/tmp/work")
+	now := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	if err := manager.SaveSessions([]Session{{
+		ID: "emt-1", Name: "EMT", Source: SessionSourceEMT,
+		CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle,
+	}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	result, err := manager.ClearImportedSessions()
+	if err != nil {
+		t.Fatalf("clear imported: %v", err)
+	}
+	if result.Cleared != 0 || len(manager.sessions) != 1 {
+		t.Fatalf("unexpected noop result: %+v len=%d", result, len(manager.sessions))
+	}
+}
+
 func TestRenameSessionRejectsEmptyName(t *testing.T) {
 	manager := NewSessionManager(filepath.Join(t.TempDir(), "sessions.json"), "/tmp/work")
 	now := time.Now().UTC()

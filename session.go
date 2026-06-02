@@ -45,6 +45,10 @@ type ImportResult struct {
 	Failed   int `json:"failed"`
 }
 
+type ClearImportedResult struct {
+	Cleared int `json:"cleared"`
+}
+
 const (
 	ImportPreviewStatusNew      = "new"
 	ImportPreviewStatusExisting = "existing"
@@ -163,6 +167,26 @@ func (m *SessionManager) DeleteSession(id string) (Session, error) {
 	}
 
 	return Session{}, fmt.Errorf("session %q not found", id)
+}
+
+func (m *SessionManager) ClearImportedSessions() (ClearImportedResult, error) {
+	var result ClearImportedResult
+	sessions := make([]Session, 0, len(m.sessions))
+	for _, session := range m.sessions {
+		if session.Source == SessionSourceImported {
+			result.Cleared++
+			continue
+		}
+		sessions = append(sessions, session)
+	}
+
+	if result.Cleared == 0 {
+		return result, nil
+	}
+	if err := m.SaveSessions(sessions); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) {
