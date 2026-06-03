@@ -14,11 +14,14 @@ import (
 type TerminalDataHandler func(sessionID string, data string)
 type TerminalExitHandler func(sessionID string, err error)
 
+const terminalBufferLimit = 200 * 1024
+
 type PTYManager struct {
-	mu     sync.Mutex
-	terms  map[string]*ptySession
-	onData TerminalDataHandler
-	onExit TerminalExitHandler
+	mu      sync.Mutex
+	terms   map[string]*ptySession
+	buffers map[string][]byte
+	onData  TerminalDataHandler
+	onExit  TerminalExitHandler
 }
 
 type ptySession struct {
@@ -28,9 +31,10 @@ type ptySession struct {
 
 func NewPTYManager(onData TerminalDataHandler, onExit TerminalExitHandler) *PTYManager {
 	return &PTYManager{
-		terms:  make(map[string]*ptySession),
-		onData: onData,
-		onExit: onExit,
+		terms:   make(map[string]*ptySession),
+		buffers: make(map[string][]byte),
+		onData:  onData,
+		onExit:  onExit,
 	}
 }
 
@@ -97,6 +101,13 @@ func (m *PTYManager) Resize(sessionID string, rows int, cols int) error {
 	return pty.Setsize(term.file, &pty.Winsize{Rows: uint16(rows), Cols: uint16(cols)})
 }
 
+func (m *PTYManager) Buffer(sessionID string) string {
+	m.mu.Lock()
+	buffer := append([]byte(nil), m.buffers[sessionID]...)
+	m.mu.Unlock()
+	return string(buffer)
+}
+
 func (m *PTYManager) Close(sessionID string) error {
 	m.mu.Lock()
 	term := m.terms[sessionID]
@@ -124,13 +135,31 @@ func (m *PTYManager) readLoop(sessionID string, file *os.File) {
 	buf := make([]byte, 4096)
 	for {
 		n, err := file.Read(buf)
-		if n > 0 && m.onData != nil {
-			m.onData(sessionID, string(buf[:n]))
+		if n > 0 {
+			data := string(buf[:n])
+			m.appendBuffer(sessionID, data)
+			if m.onData != nil {
+				m.onData(sessionID, data)
+			}
 		}
 		if err != nil {
 			return
 		}
 	}
+}
+
+func (m *PTYManager) appendBuffer(sessionID string, data string) {
+	if data == "" {
+		return
+	}
+
+	m.mu.Lock()
+	buffer := append(m.buffers[sessionID], []byte(data)...)
+	if len(buffer) > terminalBufferLimit {
+		buffer = buffer[len(buffer)-terminalBufferLimit:]
+	}
+	m.buffers[sessionID] = append([]byte(nil), buffer...)
+	m.mu.Unlock()
 }
 
 func (m *PTYManager) waitLoop(sessionID string, cmd *exec.Cmd) {

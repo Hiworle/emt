@@ -309,6 +309,16 @@ func (a *App) ResizeTerminal(id string, rows int, cols int) error {
 	return ptyManager.Resize(id, rows, cols)
 }
 
+func (a *App) TerminalBuffer(id string) string {
+	a.mu.Lock()
+	ptyManager := a.pty
+	a.mu.Unlock()
+	if ptyManager == nil {
+		return ""
+	}
+	return ptyManager.Buffer(id)
+}
+
 func (a *App) ensurePTYLocked() *PTYManager {
 	if a.pty == nil {
 		a.pty = NewPTYManager(a.emitTerminalData, a.handleTerminalExit)
