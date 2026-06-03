@@ -27,3 +27,5 @@ export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void
 export function ResumeSession(arg1:string):Promise<void>;
 
 export function SendInput(arg1:string,arg2:string):Promise<void>;
+
+export function TerminalBuffer(arg1:string):Promise<string>;
