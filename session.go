@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -44,6 +45,30 @@ type ImportResult struct {
 	Failed   int `json:"failed"`
 }
 
+type ClearImportedResult struct {
+	Cleared int `json:"cleared"`
+}
+
+const (
+	ImportPreviewStatusNew      = "new"
+	ImportPreviewStatusExisting = "existing"
+)
+
+type ImportPreviewSession struct {
+	CodexSessionID   string    `json:"codex_session_id"`
+	CodexSessionPath string    `json:"codex_session_path"`
+	Name             string    `json:"name"`
+	WorkingDir       string    `json:"working_dir"`
+	CreatedAt        time.Time `json:"created_at"`
+	LastActiveAt     time.Time `json:"last_active_at"`
+	Status           string    `json:"status"`
+}
+
+type ImportPreviewResult struct {
+	Sessions []ImportPreviewSession `json:"sessions"`
+	Failed   int                    `json:"failed"`
+}
+
 type SessionManager struct {
 	path       string
 	workingDir string
@@ -57,8 +82,8 @@ func NewSessionManager(path string, workingDir string) *SessionManager {
 func (m *SessionManager) LoadSessions() ([]Session, error) {
 	data, err := os.ReadFile(m.path)
 	if errors.Is(err, os.ErrNotExist) {
-		m.sessions = nil
-		return nil, nil
+		m.sessions = []Session{}
+		return []Session{}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -68,16 +93,16 @@ func (m *SessionManager) LoadSessions() ([]Session, error) {
 	if err := json.Unmarshal(data, &file); err != nil {
 		backup := fmt.Sprintf("%s.bak.%d", m.path, time.Now().Unix())
 		_ = os.Rename(m.path, backup)
-		m.sessions = nil
-		return nil, nil
+		m.sessions = []Session{}
+		return []Session{}, nil
 	}
 
 	for i := range file.Sessions {
 		normalizeSession(&file.Sessions[i])
 	}
 
-	m.sessions = file.Sessions
-	return append([]Session(nil), m.sessions...), nil
+	m.sessions = append([]Session{}, file.Sessions...)
+	return append([]Session{}, m.sessions...), nil
 }
 
 func (m *SessionManager) SaveSessions(sessions []Session) error {
@@ -93,7 +118,7 @@ func (m *SessionManager) SaveSessions(sessions []Session) error {
 		return err
 	}
 
-	m.sessions = append([]Session(nil), sessions...)
+	m.sessions = append([]Session{}, sessions...)
 	return nil
 }
 
@@ -142,6 +167,26 @@ func (m *SessionManager) DeleteSession(id string) (Session, error) {
 	}
 
 	return Session{}, fmt.Errorf("session %q not found", id)
+}
+
+func (m *SessionManager) ClearImportedSessions() (ClearImportedResult, error) {
+	var result ClearImportedResult
+	sessions := make([]Session, 0, len(m.sessions))
+	for _, session := range m.sessions {
+		if session.Source == SessionSourceImported {
+			result.Cleared++
+			continue
+		}
+		sessions = append(sessions, session)
+	}
+
+	if result.Cleared == 0 {
+		return result, nil
+	}
+	if err := m.SaveSessions(sessions); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) {
@@ -213,6 +258,170 @@ func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) 
 	if err := m.SaveSessions(sessions); err != nil {
 		return result, err
 	}
+	return result, nil
+}
+
+func (m *SessionManager) ImportSelectedCodexSessions(root string, codexSessionIDs []string) (ImportResult, error) {
+	var result ImportResult
+
+	requested := make(map[string]bool, len(codexSessionIDs))
+	for _, id := range codexSessionIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			requested[id] = true
+		}
+	}
+	if len(requested) == 0 {
+		return result, nil
+	}
+
+	metas, failed, err := scanCodexSessionCandidates(root)
+	if err != nil {
+		return result, err
+	}
+	result.Failed += failed
+
+	existingCodexIDs := make(map[string]bool, len(m.sessions))
+	existingSessionIDs := make(map[string]bool, len(m.sessions))
+	for _, session := range m.sessions {
+		if session.CodexSessionID != "" {
+			existingCodexIDs[session.CodexSessionID] = true
+		}
+		existingSessionIDs[session.ID] = true
+	}
+
+	found := make(map[string]bool, len(requested))
+	sessions := append([]Session(nil), m.sessions...)
+	for _, meta := range latestCodexSessionMetaByID(metas) {
+		if !requested[meta.ID] {
+			continue
+		}
+		found[meta.ID] = true
+		if existingCodexIDs[meta.ID] {
+			result.Skipped++
+			continue
+		}
+
+		session := Session{
+			ID:               importedSessionID(meta.ID, existingSessionIDs),
+			Name:             importedSessionName(meta),
+			CodexSessionID:   meta.ID,
+			CodexSessionPath: meta.Path,
+			WorkingDir:       meta.CWD,
+			Source:           SessionSourceImported,
+			CreatedAt:        meta.Timestamp,
+			LastActiveAt:     meta.ModTime,
+			Status:           SessionStatusIdle,
+		}
+		sessions = append(sessions, session)
+		existingCodexIDs[meta.ID] = true
+		existingSessionIDs[session.ID] = true
+		result.Imported++
+	}
+
+	for id := range requested {
+		if !found[id] {
+			result.Failed++
+		}
+	}
+
+	if result.Imported == 0 {
+		return result, nil
+	}
+	if err := m.SaveSessions(sessions); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func scanCodexSessionCandidates(root string) ([]CodexSessionMeta, int, error) {
+	var metas []CodexSessionMeta
+	var failed int
+
+	info, err := os.Stat(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, 0, nil
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	if !info.IsDir() {
+		return nil, 0, nil
+	}
+
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			failed++
+			return nil
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".jsonl" {
+			return nil
+		}
+
+		meta, err := ParseCodexSessionMeta(path)
+		if err != nil {
+			failed++
+			return nil
+		}
+		metas = append(metas, meta)
+		return nil
+	}); err != nil {
+		return nil, failed, err
+	}
+
+	return metas, failed, nil
+}
+
+func latestCodexSessionMetaByID(metas []CodexSessionMeta) map[string]CodexSessionMeta {
+	latestByCodexID := make(map[string]CodexSessionMeta, len(metas))
+	for _, meta := range metas {
+		existing, ok := latestByCodexID[meta.ID]
+		if !ok || meta.ModTime.After(existing.ModTime) || (meta.ModTime.Equal(existing.ModTime) && meta.Path < existing.Path) {
+			latestByCodexID[meta.ID] = meta
+		}
+	}
+	return latestByCodexID
+}
+
+func (m *SessionManager) PreviewCodexSessions(root string) (ImportPreviewResult, error) {
+	metas, failed, err := scanCodexSessionCandidates(root)
+	if err != nil {
+		return ImportPreviewResult{}, err
+	}
+
+	existingCodexIDs := make(map[string]bool, len(m.sessions))
+	for _, session := range m.sessions {
+		if session.CodexSessionID != "" {
+			existingCodexIDs[session.CodexSessionID] = true
+		}
+	}
+
+	result := ImportPreviewResult{Sessions: []ImportPreviewSession{}, Failed: failed}
+	for _, meta := range latestCodexSessionMetaByID(metas) {
+		status := ImportPreviewStatusNew
+		if existingCodexIDs[meta.ID] {
+			status = ImportPreviewStatusExisting
+		}
+		result.Sessions = append(result.Sessions, ImportPreviewSession{
+			CodexSessionID:   meta.ID,
+			CodexSessionPath: meta.Path,
+			Name:             importedSessionName(meta),
+			WorkingDir:       meta.CWD,
+			CreatedAt:        meta.Timestamp,
+			LastActiveAt:     meta.ModTime,
+			Status:           status,
+		})
+	}
+
+	sort.Slice(result.Sessions, func(i, j int) bool {
+		if result.Sessions[i].LastActiveAt.Equal(result.Sessions[j].LastActiveAt) {
+			if result.Sessions[i].CodexSessionPath == result.Sessions[j].CodexSessionPath {
+				return result.Sessions[i].CodexSessionID < result.Sessions[j].CodexSessionID
+			}
+			return result.Sessions[i].CodexSessionPath < result.Sessions[j].CodexSessionPath
+		}
+		return result.Sessions[i].LastActiveAt.After(result.Sessions[j].LastActiveAt)
+	})
 	return result, nil
 }
 

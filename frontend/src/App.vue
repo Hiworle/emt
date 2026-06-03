@@ -2,16 +2,17 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   ChooseWorkingDir,
+  ClearImportedSessions,
   CloseSession,
   CreateSession,
   DeleteSession,
-  ImportCodexSessions,
   ListSessions,
   RenameSession,
   ResumeSession,
 } from '../wailsjs/go/main/App'
 import * as models from '../wailsjs/go/models'
 import { EventsOff, EventsOn } from '../wailsjs/runtime/runtime'
+import ImportDialog from './components/ImportDialog.vue'
 import NewSessionDialog from './components/NewSessionDialog.vue'
 import RenameSessionDialog from './components/RenameSessionDialog.vue'
 import Sidebar from './components/Sidebar.vue'
@@ -29,7 +30,9 @@ const selectedId = ref('')
 const error = ref('')
 const search = ref('')
 const notice = ref('')
-const importing = ref(false)
+const importDialogOpen = ref(false)
+const importFinalizing = ref(false)
+const clearingImported = ref(false)
 const newDialogOpen = ref(false)
 const defaultWorkingDir = ref('')
 const renameDialogOpen = ref(false)
@@ -99,7 +102,8 @@ function upsertSession(source: Session) {
 }
 
 async function loadSessions() {
-  sessions.value = (await ListSessions()).map(toSession)
+  const listedSessions = (await ListSessions()) || []
+  sessions.value = listedSessions.map(toSession)
   if (selectedId.value && !sessions.value.some((session) => session.id === selectedId.value)) {
     selectedId.value = ''
   }
@@ -140,18 +144,59 @@ async function browseWorkingDir(currentDir: string) {
   }
 }
 
-async function importSessions() {
-  importing.value = true
+function openImportDialog() {
+  error.value = ''
+  notice.value = ''
+  importDialogOpen.value = true
+}
+
+async function handleImported(result: models.main.ImportResult) {
+  importFinalizing.value = true
   error.value = ''
   notice.value = ''
   try {
-    const result = await ImportCodexSessions()
-    notice.value = `Imported ${result.imported}, skipped ${result.skipped}, failed ${result.failed}`
     await loadSessions()
+    notice.value = `Imported ${result.imported}, skipped ${result.skipped}, failed ${result.failed}`
+    importDialogOpen.value = false
   } catch (err) {
     error.value = String(err)
   } finally {
-    importing.value = false
+    importFinalizing.value = false
+  }
+}
+
+function handleImportError(message: string) {
+  notice.value = ''
+  error.value = message
+}
+
+async function clearImportedSessions() {
+  if (clearingImported.value) {
+    return
+  }
+
+  if (
+    !window.confirm(
+      'Remove all imported sessions from EMT? Codex history files and EMT-created sessions will not be deleted.',
+    )
+  ) {
+    return
+  }
+
+  error.value = ''
+  notice.value = ''
+  clearingImported.value = true
+  try {
+    const result = await ClearImportedSessions()
+    await loadSessions()
+    notice.value =
+      result.cleared === 0
+        ? 'No imported sessions to clear'
+        : `Cleared ${result.cleared} imported sessions`
+  } catch (err) {
+    error.value = String(err)
+  } finally {
+    clearingImported.value = false
   }
 }
 
@@ -254,9 +299,10 @@ onUnmounted(() => {
     <Sidebar
       v-model:search="search"
       :groups="groupedSessions"
-      :importing="importing"
       :selected-id="selectedId"
-      @import-sessions="importSessions"
+      :clearing-imported="clearingImported"
+      @import-sessions="openImportDialog"
+      @clear-imported="clearImportedSessions"
       @new-session="openNewSessionDialog"
       @select-session="selectSession"
       @close-session="closeSession"
@@ -292,6 +338,13 @@ onUnmounted(() => {
       :name="renamingSession?.name || ''"
       @close="renameDialogOpen = false"
       @rename="renameSession"
+    />
+    <ImportDialog
+      :open="importDialogOpen"
+      :import-finalizing="importFinalizing"
+      @close="importDialogOpen = false"
+      @imported="handleImported"
+      @error="handleImportError"
     />
   </div>
 </template>

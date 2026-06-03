@@ -64,7 +64,7 @@ func (a *App) shutdown(ctx context.Context) {
 func (a *App) ListSessions() ([]Session, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return append([]Session(nil), a.sessions.sessions...), nil
+	return append([]Session{}, a.sessions.sessions...), nil
 }
 
 func (a *App) CreateSession(name string, workingDir string) (Session, error) {
@@ -197,6 +197,52 @@ func (a *App) ImportCodexSessions() (ImportResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.sessions.ImportCodexSessions(root)
+}
+
+func (a *App) PreviewCodexSessions() (ImportPreviewResult, error) {
+	root := defaultCodexSessionRoot()
+	if root == "" {
+		return ImportPreviewResult{Sessions: []ImportPreviewSession{}}, nil
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.sessions.PreviewCodexSessions(root)
+}
+
+func (a *App) ImportSelectedCodexSessions(codexSessionIDs []string) (ImportResult, error) {
+	root := defaultCodexSessionRoot()
+	if root == "" {
+		return ImportResult{}, nil
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.sessions.ImportSelectedCodexSessions(root, codexSessionIDs)
+}
+
+func (a *App) ClearImportedSessions() (ClearImportedResult, error) {
+	a.mu.Lock()
+	importedIDs := make([]string, 0)
+	for _, session := range a.sessions.sessions {
+		if session.Source == SessionSourceImported {
+			importedIDs = append(importedIDs, session.ID)
+		}
+	}
+	ptyManager := a.pty
+	result, err := a.sessions.ClearImportedSessions()
+	if err != nil {
+		a.mu.Unlock()
+		return result, err
+	}
+
+	if ptyManager != nil {
+		for _, id := range importedIDs {
+			_ = ptyManager.Close(id)
+		}
+	}
+	a.mu.Unlock()
+	return result, nil
 }
 
 func (a *App) RenameSession(id string, name string) (Session, error) {
