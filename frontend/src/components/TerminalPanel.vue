@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
@@ -8,6 +8,7 @@ import { EventsOn } from '../../wailsjs/runtime/runtime'
 
 const props = defineProps<{
   sessionId: string
+  active: boolean
 }>()
 
 const terminalEl = ref<HTMLDivElement | null>(null)
@@ -18,12 +19,23 @@ let inputDisposable: { dispose: () => void } | null = null
 let terminalDataDisposable: (() => void) | null = null
 
 function fitTerminal() {
-  if (!terminal || !fitAddon) {
+  if (!terminal || !fitAddon || !props.active) {
     return
   }
 
   fitAddon.fit()
   ResizeTerminal(props.sessionId, terminal.rows, terminal.cols).catch(() => undefined)
+}
+
+async function fitActiveTerminal() {
+  if (!props.active) {
+    return
+  }
+  await nextTick()
+  requestAnimationFrame(() => {
+    fitTerminal()
+    terminal?.focus()
+  })
 }
 
 function handleTerminalData(event: { sessionId?: string; data?: string }) {
@@ -50,7 +62,9 @@ onMounted(async () => {
   fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
   terminal.open(terminalEl.value!)
-  terminal.focus()
+  if (props.active) {
+    terminal.focus()
+  }
 
   try {
     const buffer = await TerminalBuffer(sessionId)
@@ -70,8 +84,10 @@ onMounted(async () => {
 
   terminalDataDisposable = EventsOn('terminal:data', handleTerminalData)
   window.addEventListener('resize', fitTerminal)
-  requestAnimationFrame(fitTerminal)
+  fitActiveTerminal()
 })
+
+watch(() => props.active, fitActiveTerminal)
 
 onUnmounted(() => {
   terminalDataDisposable?.()
