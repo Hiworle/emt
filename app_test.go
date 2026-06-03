@@ -99,6 +99,24 @@ func TestAppPreviewCodexSessionsReturnsNonNilEmptySessions(t *testing.T) {
 	}
 }
 
+func TestAppTerminalBufferReturnsPTYBuffer(t *testing.T) {
+	ptyManager := NewPTYManager(nil, nil)
+	readPTYTestInput(t, ptyManager, "session-1", "saved output")
+	app := &App{pty: ptyManager}
+
+	if got := app.TerminalBuffer("session-1"); got != "saved output" {
+		t.Fatalf("got buffer %q, want %q", got, "saved output")
+	}
+}
+
+func TestAppTerminalBufferWithoutPTYReturnsEmpty(t *testing.T) {
+	app := &App{}
+
+	if got := app.TerminalBuffer("session-1"); got != "" {
+		t.Fatalf("got buffer %q, want empty string", got)
+	}
+}
+
 func TestAppClearImportedSessionsRemovesImportedSessions(t *testing.T) {
 	storePath := filepath.Join(t.TempDir(), "sessions.json")
 	manager := NewSessionManager(storePath, "/tmp/work")

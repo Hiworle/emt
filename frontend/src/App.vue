@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   ChooseWorkingDir,
   ClearImportedSessions,
@@ -27,6 +27,7 @@ type SessionGroup = {
 
 const sessions = ref<Session[]>([])
 const selectedId = ref('')
+const mountedTerminalIds = ref<string[]>([])
 const error = ref('')
 const search = ref('')
 const notice = ref('')
@@ -39,6 +40,9 @@ const renameDialogOpen = ref(false)
 const renamingSessionId = ref('')
 
 const selectedSession = computed(() => sessions.value.find((session) => session.id === selectedId.value))
+const mountedTerminalSessions = computed(() =>
+  mountedTerminalIds.value.filter((id) => sessions.value.some((session) => session.id === id)),
+)
 const renamingSession = computed(() =>
   sessions.value.find((session) => session.id === renamingSessionId.value),
 )
@@ -104,6 +108,9 @@ function upsertSession(source: Session) {
 async function loadSessions() {
   const listedSessions = (await ListSessions()) || []
   sessions.value = listedSessions.map(toSession)
+  mountedTerminalIds.value = mountedTerminalIds.value.filter((id) =>
+    sessions.value.some((session) => session.id === id),
+  )
   if (selectedId.value && !sessions.value.some((session) => session.id === selectedId.value)) {
     selectedId.value = ''
   }
@@ -111,6 +118,12 @@ async function loadSessions() {
     selectedId.value = sessions.value[0].id
   }
 }
+
+watch(selectedId, (id) => {
+  if (id && !mountedTerminalIds.value.includes(id)) {
+    mountedTerminalIds.value = [...mountedTerminalIds.value, id]
+  }
+})
 
 function openNewSessionDialog() {
   defaultWorkingDir.value = selectedSession.value?.working_dir || ''
@@ -322,8 +335,14 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <TerminalPanel v-if="selectedId" :key="selectedId" :session-id="selectedId" />
-      <div v-else class="empty-terminal">No session selected</div>
+      <TerminalPanel
+        v-for="sessionId in mountedTerminalSessions"
+        v-show="sessionId === selectedId"
+        :key="sessionId"
+        :session-id="sessionId"
+        :active="sessionId === selectedId"
+      />
+      <div v-if="!selectedId" class="empty-terminal">No session selected</div>
     </main>
 
     <NewSessionDialog

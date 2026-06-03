@@ -53,3 +53,7 @@ export function ResumeSession(arg1) {
 export function SendInput(arg1, arg2) {
   return window['go']['main']['App']['SendInput'](arg1, arg2);
 }
+
+export function TerminalBuffer(arg1) {
+  return window['go']['main']['App']['TerminalBuffer'](arg1);
+}
