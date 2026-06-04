@@ -272,14 +272,7 @@ func (a *App) DeleteSession(id string) (Session, error) {
 }
 
 func (a *App) ChooseWorkingDir(defaultDir string) (string, error) {
-	options := runtime.OpenDialogOptions{}
-	defaultDir = strings.TrimSpace(defaultDir)
-	if defaultDir != "" {
-		if info, err := os.Stat(defaultDir); err == nil && info.IsDir() {
-			options.DefaultDirectory = defaultDir
-		}
-	}
-	return runtime.OpenDirectoryDialog(a.ctx, options)
+	return choosePlatformWorkingDir(a, defaultDir)
 }
 
 func (a *App) resolveWorkingDir(workingDir string) (string, error) {
