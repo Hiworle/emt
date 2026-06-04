@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -30,15 +29,10 @@ func NewApp() *App {
 		workDir = "."
 	}
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = workDir
-	}
-
 	return &App{
 		workDir:     workDir,
-		sessions:    NewSessionManager(filepath.Join(homeDir, ".emt", "sessions.json"), workDir),
-		codexSource: localCodexSessionSource{},
+		sessions:    newDefaultSessionManager(workDir),
+		codexSource: defaultCodexSource(),
 	}
 }
 
@@ -289,9 +283,13 @@ func (a *App) ChooseWorkingDir(defaultDir string) (string, error) {
 }
 
 func (a *App) resolveWorkingDir(workingDir string) (string, error) {
+	return resolvePlatformWorkingDir(workingDir, a.workDir)
+}
+
+func resolveLocalWorkingDir(workingDir string, fallback string) (string, error) {
 	workingDir = strings.TrimSpace(workingDir)
 	if workingDir == "" {
-		workingDir = a.workDir
+		workingDir = strings.TrimSpace(fallback)
 	}
 	info, err := os.Stat(workingDir)
 	if err != nil {
@@ -299,6 +297,17 @@ func (a *App) resolveWorkingDir(workingDir string) (string, error) {
 	}
 	if !info.IsDir() {
 		return "", fmt.Errorf("%q is not a directory", workingDir)
+	}
+	return workingDir, nil
+}
+
+func resolveWSLWorkingDir(workingDir string, fallback string) (string, error) {
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		workingDir = strings.TrimSpace(fallback)
+	}
+	if err := validateWSLWorkingDir(workingDir); err != nil {
+		return "", err
 	}
 	return workingDir, nil
 }
@@ -435,14 +444,6 @@ func (a *App) saveCodexSessionMeta(sessionID string, meta CodexSessionMeta) {
 	if err == nil {
 		a.emitSessionUpdated(session)
 	}
-}
-
-func defaultCodexSessionRoot() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(homeDir, ".codex", "sessions")
 }
 
 func contextOrBackground(ctx context.Context) context.Context {

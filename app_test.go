@@ -66,6 +66,24 @@ func TestResolveWorkingDirRejectsMissingDir(t *testing.T) {
 	}
 }
 
+func TestResolveWSLWorkingDirRejectsWindowsPaths(t *testing.T) {
+	for _, path := range []string{`C:\Users\hope`, `\\wsl$\Debian\home\hope`, "relative"} {
+		if _, err := resolveWSLWorkingDir(path, ""); err == nil {
+			t.Fatalf("expected %q to be rejected", path)
+		}
+	}
+}
+
+func TestResolveWSLWorkingDirAcceptsAbsoluteWSLPath(t *testing.T) {
+	got, err := resolveWSLWorkingDir("/home/hope/proj/emt", "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if got != "/home/hope/proj/emt" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestAppListSessionsReturnsNonNilEmptySlice(t *testing.T) {
 	app := &App{sessions: NewSessionManager(filepath.Join(t.TempDir(), "sessions.json"), "/tmp/work")}
 
