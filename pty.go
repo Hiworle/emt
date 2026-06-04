@@ -4,12 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
-	"os/exec"
 	"strings"
 	"sync"
-
-	"github.com/creack/pty"
 )
 
 type TerminalDataHandler func(sessionID string, data string)
@@ -40,7 +36,7 @@ type terminalProcess interface {
 }
 
 func NewPTYManager(onData TerminalDataHandler, onExit TerminalExitHandler) *PTYManager {
-	return NewPTYManagerWithBackend(localPTYBackend{}, codexRuntimeLocal, onData, onExit)
+	return NewPTYManagerWithBackend(defaultTerminalBackend(), defaultCodexRuntime(), onData, onExit)
 }
 
 func NewPTYManagerWithBackend(backend terminalBackend, runtime codexRuntime, onData TerminalDataHandler, onExit TerminalExitHandler) *PTYManager {
@@ -228,29 +224,3 @@ func (m *PTYManager) waitLoop(sessionID string, process terminalProcess) {
 		m.onExit(sessionID, err)
 	}
 }
-
-type localPTYBackend struct{}
-
-func (localPTYBackend) Start(ctx context.Context, command terminalCommand) (terminalProcess, error) {
-	cmd := exec.CommandContext(ctx, command.Name, command.Args...)
-	file, err := pty.Start(cmd)
-	if err != nil {
-		return nil, err
-	}
-	return &localPTYProcess{cmd: cmd, file: file}, nil
-}
-
-type localPTYProcess struct {
-	cmd  *exec.Cmd
-	file *os.File
-}
-
-func (p *localPTYProcess) Read(buf []byte) (int, error) { return p.file.Read(buf) }
-func (p *localPTYProcess) Write(data []byte) (int, error) {
-	return p.file.Write(data)
-}
-func (p *localPTYProcess) Resize(rows int, cols int) error {
-	return pty.Setsize(p.file, &pty.Winsize{Rows: uint16(rows), Cols: uint16(cols)})
-}
-func (p *localPTYProcess) Close() error { return p.file.Close() }
-func (p *localPTYProcess) Wait() error  { return p.cmd.Wait() }
