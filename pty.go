@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/creack/pty"
@@ -44,6 +45,48 @@ func codexNewArgs(workingDir string) []string {
 
 func codexResumeArgs(codexSessionID string, workingDir string) []string {
 	return []string{"resume", codexSessionID, "-C", workingDir}
+}
+
+type codexRuntime string
+
+const (
+	codexRuntimeLocal codexRuntime = "local"
+	codexRuntimeWSL   codexRuntime = "wsl"
+)
+
+type terminalCommand struct {
+	Name string
+	Args []string
+}
+
+func codexNewCommand(runtime codexRuntime, workingDir string) terminalCommand {
+	args := codexNewArgs(workingDir)
+	if runtime == codexRuntimeWSL {
+		return terminalCommand{
+			Name: "wsl.exe",
+			Args: append([]string{"--cd", workingDir, "codex"}, args...),
+		}
+	}
+	return terminalCommand{Name: "codex", Args: args}
+}
+
+func codexResumeCommand(runtime codexRuntime, codexSessionID string, workingDir string) terminalCommand {
+	args := codexResumeArgs(codexSessionID, workingDir)
+	if runtime == codexRuntimeWSL {
+		return terminalCommand{
+			Name: "wsl.exe",
+			Args: append([]string{"--cd", workingDir, "codex"}, args...),
+		}
+	}
+	return terminalCommand{Name: "codex", Args: args}
+}
+
+func validateWSLWorkingDir(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+		return errors.New("working directory must be a WSL absolute path")
+	}
+	return nil
 }
 
 func (m *PTYManager) StartNew(ctx context.Context, sessionID string, workingDir string) error {

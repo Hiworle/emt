@@ -23,6 +23,55 @@ func TestCodexResumeArgs(t *testing.T) {
 	}
 }
 
+func TestCodexNewCommandLocal(t *testing.T) {
+	got := codexNewCommand(codexRuntimeLocal, "/tmp/work")
+	want := terminalCommand{Name: "codex", Args: []string{"-C", "/tmp/work"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestCodexResumeCommandLocal(t *testing.T) {
+	got := codexResumeCommand(codexRuntimeLocal, "019d-meta", "/tmp/work")
+	want := terminalCommand{Name: "codex", Args: []string{"resume", "019d-meta", "-C", "/tmp/work"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestCodexNewCommandWSL(t *testing.T) {
+	got := codexNewCommand(codexRuntimeWSL, "/home/hope/proj/emt")
+	want := terminalCommand{
+		Name: "wsl.exe",
+		Args: []string{"--cd", "/home/hope/proj/emt", "codex", "-C", "/home/hope/proj/emt"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestCodexResumeCommandWSL(t *testing.T) {
+	got := codexResumeCommand(codexRuntimeWSL, "019d-meta", "/home/hope/proj/emt")
+	want := terminalCommand{
+		Name: "wsl.exe",
+		Args: []string{"--cd", "/home/hope/proj/emt", "codex", "resume", "019d-meta", "-C", "/home/hope/proj/emt"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestValidateWSLWorkingDir(t *testing.T) {
+	if err := validateWSLWorkingDir("/home/hope/proj/emt"); err != nil {
+		t.Fatalf("expected valid WSL path: %v", err)
+	}
+	for _, path := range []string{"", "relative/path", `C:\Users\hope`, `\\wsl$\Debian\home\hope`} {
+		if err := validateWSLWorkingDir(path); err == nil {
+			t.Fatalf("expected %q to be rejected", path)
+		}
+	}
+}
+
 func TestPTYReadLoopBuffersOutputAndEmitsLiveData(t *testing.T) {
 	var events []string
 	manager := NewPTYManager(func(sessionID string, data string) {
