@@ -71,17 +71,22 @@ type ImportPreviewResult struct {
 
 type SessionManager struct {
 	path       string
+	store      sessionStore
 	workingDir string
 	sessions   []Session
 }
 
 func NewSessionManager(path string, workingDir string) *SessionManager {
-	return &SessionManager{path: path, workingDir: workingDir}
+	return &SessionManager{path: path, store: newLocalSessionStore(path), workingDir: workingDir}
+}
+
+func NewSessionManagerWithStore(store sessionStore, workingDir string) *SessionManager {
+	return &SessionManager{store: store, workingDir: workingDir}
 }
 
 func (m *SessionManager) LoadSessions() ([]Session, error) {
-	data, err := os.ReadFile(m.path)
-	if errors.Is(err, os.ErrNotExist) {
+	data, err := m.store.Load()
+	if isStoreNotExist(err) || len(strings.TrimSpace(string(data))) == 0 {
 		m.sessions = []Session{}
 		return []Session{}, nil
 	}
@@ -91,8 +96,9 @@ func (m *SessionManager) LoadSessions() ([]Session, error) {
 
 	var file sessionFile
 	if err := json.Unmarshal(data, &file); err != nil {
-		backup := fmt.Sprintf("%s.bak.%d", m.path, time.Now().Unix())
-		_ = os.Rename(m.path, backup)
+		if m.path != "" {
+			backupCorruptLocalSessionStore(m.path)
+		}
 		m.sessions = []Session{}
 		return []Session{}, nil
 	}
@@ -106,15 +112,11 @@ func (m *SessionManager) LoadSessions() ([]Session, error) {
 }
 
 func (m *SessionManager) SaveSessions(sessions []Session) error {
-	if err := os.MkdirAll(filepath.Dir(m.path), 0o700); err != nil {
-		return err
-	}
-
 	data, err := json.MarshalIndent(sessionFile{Sessions: sessions}, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(m.path, data, 0o600); err != nil {
+	if err := m.store.Save(data); err != nil {
 		return err
 	}
 

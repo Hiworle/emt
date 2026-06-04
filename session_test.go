@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -116,6 +118,42 @@ func TestSessionStoreBacksUpCorruptJSON(t *testing.T) {
 	}
 	if len(matches) != 1 {
 		t.Fatalf("expected one backup, got %d", len(matches))
+	}
+}
+
+func TestSessionManagerLoadsFromStore(t *testing.T) {
+	now := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	data, err := json.Marshal(sessionFile{Sessions: []Session{{
+		ID: "emt-1", Name: "Stored", Source: SessionSourceEMT,
+		CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle,
+	}}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	manager := NewSessionManagerWithStore(&memorySessionStore{data: data}, "/tmp/work")
+	sessions, err := manager.LoadSessions()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].Name != "Stored" {
+		t.Fatalf("unexpected sessions: %+v", sessions)
+	}
+}
+
+func TestSessionManagerSavesToStore(t *testing.T) {
+	store := &memorySessionStore{}
+	manager := NewSessionManagerWithStore(store, "/tmp/work")
+	now := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+
+	if err := manager.SaveSessions([]Session{{
+		ID: "emt-1", Name: "Saved", Source: SessionSourceEMT,
+		CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle,
+	}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if !strings.Contains(string(store.data), `"name": "Saved"`) {
+		t.Fatalf("expected saved JSON, got %s", store.data)
 	}
 }
 
@@ -655,4 +693,24 @@ func writeCodexMeta(t *testing.T, root string, name string, id string, cwd strin
 		t.Fatalf("write jsonl: %v", err)
 	}
 	return path
+}
+
+type memorySessionStore struct {
+	data []byte
+	err  error
+}
+
+func (s *memorySessionStore) Load() ([]byte, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return append([]byte(nil), s.data...), nil
+}
+
+func (s *memorySessionStore) Save(data []byte) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.data = append([]byte(nil), data...)
+	return nil
 }
