@@ -173,6 +173,22 @@ func TestParseCodexSessionMeta(t *testing.T) {
 	}
 }
 
+func TestParseCodexSessionMetaFromReader(t *testing.T) {
+	modTime := time.Date(2026, 5, 29, 1, 0, 0, 0, time.UTC)
+	reader := strings.NewReader(`{"timestamp":"2026-05-27T01:00:00Z","type":"session_meta","payload":{"id":"019d-meta","cwd":"/tmp/work"}}` + "\n")
+
+	meta, err := ParseCodexSessionMetaFromReader("/wsl/rollout.jsonl", modTime, reader)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if meta.ID != "019d-meta" || meta.CWD != "/tmp/work" || meta.Path != "/wsl/rollout.jsonl" {
+		t.Fatalf("unexpected meta: %+v", meta)
+	}
+	if !meta.ModTime.Equal(modTime) {
+		t.Fatalf("expected mod time %v, got %v", modTime, meta.ModTime)
+	}
+}
+
 func TestParseCodexSessionMetaIncludesTimestampAndPath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rollout.jsonl")
 	line := `{"timestamp":"2026-05-27T01:00:00Z","type":"session_meta","payload":{"id":"019d-meta","cwd":"/tmp/work"}}` + "\n"

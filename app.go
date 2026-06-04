@@ -15,11 +15,12 @@ import (
 
 // App struct
 type App struct {
-	ctx      context.Context
-	workDir  string
-	sessions *SessionManager
-	pty      *PTYManager
-	mu       sync.Mutex
+	ctx         context.Context
+	workDir     string
+	sessions    *SessionManager
+	codexSource CodexSessionSource
+	pty         *PTYManager
+	mu          sync.Mutex
 }
 
 // NewApp creates a new App application struct
@@ -35,8 +36,9 @@ func NewApp() *App {
 	}
 
 	return &App{
-		workDir:  workDir,
-		sessions: NewSessionManager(filepath.Join(homeDir, ".emt", "sessions.json"), workDir),
+		workDir:     workDir,
+		sessions:    NewSessionManager(filepath.Join(homeDir, ".emt", "sessions.json"), workDir),
+		codexSource: localCodexSessionSource{},
 	}
 }
 
@@ -193,10 +195,14 @@ func (a *App) ImportCodexSessions() (ImportResult, error) {
 	if root == "" {
 		return ImportResult{}, nil
 	}
+	metas, failed, err := a.codexSessionSource().Scan(root)
+	if err != nil {
+		return ImportResult{}, err
+	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.sessions.ImportCodexSessions(root)
+	return a.sessions.ImportCodexMetas(metas, failed)
 }
 
 func (a *App) PreviewCodexSessions() (ImportPreviewResult, error) {
@@ -204,10 +210,14 @@ func (a *App) PreviewCodexSessions() (ImportPreviewResult, error) {
 	if root == "" {
 		return ImportPreviewResult{Sessions: []ImportPreviewSession{}}, nil
 	}
+	metas, failed, err := a.codexSessionSource().Scan(root)
+	if err != nil {
+		return ImportPreviewResult{}, err
+	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.sessions.PreviewCodexSessions(root)
+	return a.sessions.PreviewCodexMetas(metas, failed), nil
 }
 
 func (a *App) ImportSelectedCodexSessions(codexSessionIDs []string) (ImportResult, error) {
@@ -215,10 +225,14 @@ func (a *App) ImportSelectedCodexSessions(codexSessionIDs []string) (ImportResul
 	if root == "" {
 		return ImportResult{}, nil
 	}
+	metas, failed, err := a.codexSessionSource().Scan(root)
+	if err != nil {
+		return ImportResult{}, err
+	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.sessions.ImportSelectedCodexSessions(root, codexSessionIDs)
+	return a.sessions.ImportSelectedCodexMetas(metas, failed, codexSessionIDs)
 }
 
 func (a *App) ClearImportedSessions() (ClearImportedResult, error) {
@@ -326,6 +340,13 @@ func (a *App) ensurePTYLocked() *PTYManager {
 	return a.pty
 }
 
+func (a *App) codexSessionSource() CodexSessionSource {
+	if a.codexSource != nil {
+		return a.codexSource
+	}
+	return localCodexSessionSource{}
+}
+
 func (a *App) sessionIndexLocked(id string) int {
 	for i := range a.sessions.sessions {
 		if a.sessions.sessions[i].ID == id {
@@ -387,8 +408,9 @@ func (a *App) discoverCodexSessionID(sessionID string, startedAt time.Time, work
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
+	source := a.codexSessionSource()
 	for time.Now().Before(deadline) {
-		meta, err := FindCodexSessionMetaAfter(root, startedAt, workingDir)
+		meta, err := source.FindAfter(root, startedAt, workingDir)
 		if err == nil && meta.ID != "" {
 			a.saveCodexSessionMeta(sessionID, meta)
 			return

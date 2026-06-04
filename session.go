@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -192,18 +191,15 @@ func (m *SessionManager) ClearImportedSessions() (ClearImportedResult, error) {
 }
 
 func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) {
-	var result ImportResult
-
-	info, err := os.Stat(root)
-	if errors.Is(err, os.ErrNotExist) {
-		return result, nil
-	}
+	metas, failed, err := localCodexSessionSource{}.Scan(root)
 	if err != nil {
-		return result, err
+		return ImportResult{}, err
 	}
-	if !info.IsDir() {
-		return result, nil
-	}
+	return m.ImportCodexMetas(metas, failed)
+}
+
+func (m *SessionManager) ImportCodexMetas(metas []CodexSessionMeta, failed int) (ImportResult, error) {
+	result := ImportResult{Failed: failed}
 
 	existingCodexIDs := make(map[string]bool, len(m.sessions))
 	existingSessionIDs := make(map[string]bool, len(m.sessions))
@@ -215,23 +211,10 @@ func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) 
 	}
 
 	sessions := append([]Session(nil), m.sessions...)
-	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			result.Failed++
-			return nil
-		}
-		if entry.IsDir() || filepath.Ext(path) != ".jsonl" {
-			return nil
-		}
-
-		meta, err := ParseCodexSessionMeta(path)
-		if err != nil {
-			result.Failed++
-			return nil
-		}
+	for _, meta := range metas {
 		if existingCodexIDs[meta.ID] {
 			result.Skipped++
-			return nil
+			continue
 		}
 
 		session := Session{
@@ -249,9 +232,6 @@ func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) 
 		existingCodexIDs[meta.ID] = true
 		existingSessionIDs[session.ID] = true
 		result.Imported++
-		return nil
-	}); err != nil {
-		return result, err
 	}
 
 	if result.Imported == 0 {
@@ -264,7 +244,15 @@ func (m *SessionManager) ImportCodexSessions(root string) (ImportResult, error) 
 }
 
 func (m *SessionManager) ImportSelectedCodexSessions(root string, codexSessionIDs []string) (ImportResult, error) {
-	var result ImportResult
+	metas, failed, err := localCodexSessionSource{}.Scan(root)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	return m.ImportSelectedCodexMetas(metas, failed, codexSessionIDs)
+}
+
+func (m *SessionManager) ImportSelectedCodexMetas(metas []CodexSessionMeta, failed int, codexSessionIDs []string) (ImportResult, error) {
+	result := ImportResult{Failed: failed}
 
 	requested := make(map[string]bool, len(codexSessionIDs))
 	for _, id := range codexSessionIDs {
@@ -276,12 +264,6 @@ func (m *SessionManager) ImportSelectedCodexSessions(root string, codexSessionID
 	if len(requested) == 0 {
 		return result, nil
 	}
-
-	metas, failed, err := scanCodexSessionCandidates(root)
-	if err != nil {
-		return result, err
-	}
-	result.Failed += failed
 
 	existingCodexIDs := make(map[string]bool, len(m.sessions))
 	existingSessionIDs := make(map[string]bool, len(m.sessions))
@@ -386,11 +368,14 @@ func latestCodexSessionMetaByID(metas []CodexSessionMeta) map[string]CodexSessio
 }
 
 func (m *SessionManager) PreviewCodexSessions(root string) (ImportPreviewResult, error) {
-	metas, failed, err := scanCodexSessionCandidates(root)
+	metas, failed, err := localCodexSessionSource{}.Scan(root)
 	if err != nil {
 		return ImportPreviewResult{}, err
 	}
+	return m.PreviewCodexMetas(metas, failed), nil
+}
 
+func (m *SessionManager) PreviewCodexMetas(metas []CodexSessionMeta, failed int) ImportPreviewResult {
 	existingCodexIDs := make(map[string]bool, len(m.sessions))
 	for _, session := range m.sessions {
 		if session.CodexSessionID != "" {
@@ -424,7 +409,7 @@ func (m *SessionManager) PreviewCodexSessions(root string) (ImportPreviewResult,
 		}
 		return result.Sessions[i].LastActiveAt.After(result.Sessions[j].LastActiveAt)
 	})
-	return result, nil
+	return result
 }
 
 func importedSessionID(codexSessionID string, existing map[string]bool) string {
@@ -468,37 +453,7 @@ func ParseCodexSessionMeta(path string) (CodexSessionMeta, error) {
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		var line struct {
-			Timestamp string `json:"timestamp"`
-			Type      string `json:"type"`
-			Payload   struct {
-				ID  string `json:"id"`
-				CWD string `json:"cwd"`
-			} `json:"payload"`
-		}
-		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
-			continue
-		}
-		if line.Type == "session_meta" && line.Payload.ID != "" {
-			timestamp, _ := time.Parse(time.RFC3339Nano, line.Timestamp)
-			if timestamp.IsZero() {
-				timestamp = info.ModTime()
-			}
-			return CodexSessionMeta{
-				ID:        line.Payload.ID,
-				CWD:       line.Payload.CWD,
-				Path:      path,
-				Timestamp: timestamp,
-				ModTime:   info.ModTime(),
-			}, nil
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return CodexSessionMeta{}, err
-	}
-	return CodexSessionMeta{}, errors.New("codex session_meta not found")
+	return ParseCodexSessionMetaFromReader(path, info.ModTime(), file)
 }
 
 func FindCodexSessionMetaAfter(root string, after time.Time, cwd string) (CodexSessionMeta, error) {
