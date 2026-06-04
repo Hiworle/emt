@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"strings"
@@ -72,6 +73,43 @@ func TestValidateWSLWorkingDir(t *testing.T) {
 	}
 }
 
+func TestPTYManagerStartsTerminalBackendCommand(t *testing.T) {
+	backend := &fakeTerminalBackend{}
+	manager := NewPTYManagerWithBackend(backend, codexRuntimeLocal, nil, nil)
+
+	if err := manager.StartNew(context.Background(), "session-1", "/tmp/work"); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	want := terminalCommand{Name: "codex", Args: []string{"-C", "/tmp/work"}}
+	if !reflect.DeepEqual(backend.commands[0], want) {
+		t.Fatalf("got %#v, want %#v", backend.commands[0], want)
+	}
+}
+
+func TestPTYManagerWritesAndResizesBackendProcess(t *testing.T) {
+	process := &fakeTerminalProcess{}
+	backend := &fakeTerminalBackend{next: process}
+	manager := NewPTYManagerWithBackend(backend, codexRuntimeLocal, nil, nil)
+
+	if err := manager.StartNew(context.Background(), "session-1", "/tmp/work"); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := manager.Write("session-1", "hello"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := manager.Resize("session-1", 24, 80); err != nil {
+		t.Fatalf("resize: %v", err)
+	}
+
+	if process.writes.String() != "hello" {
+		t.Fatalf("got writes %q", process.writes.String())
+	}
+	if process.rows != 24 || process.cols != 80 {
+		t.Fatalf("got size %dx%d", process.rows, process.cols)
+	}
+}
+
 func TestPTYReadLoopBuffersOutputAndEmitsLiveData(t *testing.T) {
 	var events []string
 	manager := NewPTYManager(func(sessionID string, data string) {
@@ -123,4 +161,48 @@ func readPTYTestInput(t *testing.T, manager *PTYManager, sessionID string, data 
 	}
 
 	manager.readLoop(sessionID, file)
+}
+
+type fakeTerminalBackend struct {
+	commands []terminalCommand
+	next     *fakeTerminalProcess
+}
+
+func (b *fakeTerminalBackend) Start(ctx context.Context, command terminalCommand) (terminalProcess, error) {
+	b.commands = append(b.commands, command)
+	if b.next != nil {
+		return b.next, nil
+	}
+	return &fakeTerminalProcess{}, nil
+}
+
+type fakeTerminalProcess struct {
+	reads  strings.Reader
+	writes strings.Builder
+	rows   int
+	cols   int
+	closed bool
+}
+
+func (p *fakeTerminalProcess) Read(buf []byte) (int, error) {
+	return p.reads.Read(buf)
+}
+
+func (p *fakeTerminalProcess) Write(data []byte) (int, error) {
+	return p.writes.Write(data)
+}
+
+func (p *fakeTerminalProcess) Resize(rows int, cols int) error {
+	p.rows = rows
+	p.cols = cols
+	return nil
+}
+
+func (p *fakeTerminalProcess) Close() error {
+	p.closed = true
+	return nil
+}
+
+func (p *fakeTerminalProcess) Wait() error {
+	return nil
 }

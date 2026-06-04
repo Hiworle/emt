@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -149,14 +148,8 @@ func TestAppClearImportedSessionsKeepsPTYWhenSaveFails(t *testing.T) {
 		{ID: "imported-1", Name: "Imported", Source: SessionSourceImported, CreatedAt: now, LastActiveAt: now, Status: SessionStatusIdle},
 	}
 
-	tempFile, err := os.CreateTemp(t.TempDir(), "pty")
-	if err != nil {
-		t.Fatalf("create temp file: %v", err)
-	}
-	defer tempFile.Close()
-
 	ptyManager := NewPTYManager(nil, nil)
-	ptyManager.terms["imported-1"] = &ptySession{file: tempFile}
+	ptyManager.terms["imported-1"] = &fakeTerminalProcess{}
 	app := &App{sessions: manager, pty: ptyManager}
 
 	if _, err := app.ClearImportedSessions(); err == nil {
